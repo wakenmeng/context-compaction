@@ -1,0 +1,26 @@
+[project]
+name = "context-compaction"
+version = "0.1.0"
+description = "Markov state compaction experiment based on arXiv 2611.05306"
+# one interpreter keeps uv.lock to a single resolution
+requires-python = "==3.12.*"
+dependencies = [
+  "mini-swe-agent==2.4.0",
+  "swebench==5.0.2",
+  "datasets>=2.19",
+  "pyarrow>=15",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "scripts"]
