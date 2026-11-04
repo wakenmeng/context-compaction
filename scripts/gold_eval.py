@@ -51,13 +51,14 @@ def main(argv=None):
     parser.add_argument("--instance", action="append", help="explicit instance id, repeatable, overrides --set")
     parser.add_argument("--workers", type=int, default=2)
     parser.add_argument("--timeout", type=int, default=1800, help="seconds per instance")
+    parser.add_argument("--run-id", help="harness run id; use a new one to rerun finished instances")
     args = parser.parse_args(argv)
 
     problem = verify()
     if problem:
         sys.exit(problem)
     ids = args.instance or selected_ids(args.which)
-    run_id = "gold-" + ("custom" if args.instance else args.which)
+    run_id = args.run_id or "gold-" + ("custom" if args.instance else args.which)
 
     records = {r["instance_id"]: r for r in load_records(pins.DATASET_PATH)}
     unknown = [i for i in ids if i not in records]

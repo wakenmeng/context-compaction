@@ -148,3 +148,13 @@ def test_frozen_config_matches_regeneration(tmp_path):
     out = tmp_path / "instances.json"
     si.main(["--output", str(out)])
     assert out.read_text() == pins.INSTANCES_PATH.read_text()
+
+
+def test_env_unsolvable_ids_belong_to_the_frozen_sample():
+    unsolvable = json.loads((pins.ROOT / "configs" / "env_unsolvable.json").read_text())
+    config = json.loads(pins.INSTANCES_PATH.read_text())
+    sampled = set(config["smoke"]["ids"]) | set(config["formal"]["ids"])
+    for item in unsolvable["instances"]:
+        assert item["instance_id"] in sampled
+        group = "formal" if item["instance_id"] in config["formal"]["ids"] else "smoke"
+        assert item["set"] == group
