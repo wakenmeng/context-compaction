@@ -1,0 +1,8 @@
+{
+  "requested": 120,
+  "resolved": 119,
+  "not_resolved": [
+    "psf__requests-1724"
+  ],
+  "minutes": 8.2
+}

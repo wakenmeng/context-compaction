@@ -5,6 +5,10 @@ __pycache__/
 .env.*
 results/*
 !results/.gitkeep
+# gold summaries are kept, per-instance harness logs are not
+!results/gold/
+results/gold/*
+!results/gold/*.json
 data/
 logs/
 .DS_Store
