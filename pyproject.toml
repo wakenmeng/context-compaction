@@ -9,6 +9,9 @@ dependencies = [
   "swebench==5.0.2",
   "datasets>=2.19",
   "pyarrow>=15",
+  # litellm imports its MCP gateway module on every call that passes tools,
+  # without declaring the dependency
+  "mcp>=1.0",
 ]
 
 [project.optional-dependencies]
