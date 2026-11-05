@@ -608,3 +608,37 @@ def test_hist_answers_are_cut_not_rerun(repo, tmp_path):
                 and "no matches" in m["content"]]
     logged = [e.payload for e in EventLog(tmp_path / "run" / "events.jsonl").events if e.kind == "hist"]
     assert logged[0]["output"] == "no matches" and hist_obs, "the model saw the answer that was logged"
+
+
+# ---------- freeze guard ----------
+
+
+def frozen_root(tmp_path, config):
+    import run_group
+
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "frozen_c.json").write_text(json.dumps({
+        "code_commit": "abc", "config_sha256": run_group.config_hash(config), "frozen_paths": ["src"],
+    }))
+    return tmp_path
+
+
+def test_formal_run_needs_the_frozen_config_and_code(tmp_path):
+    import run_group
+
+    config = {"agent": {"step_limit": 250}}
+    root = frozen_root(tmp_path, config)
+    assert run_group.check_frozen("c", config, root=root, changed=lambda c, p: False)["code_commit"] == "abc"
+    with pytest.raises(SystemExit, match="config differs"):
+        run_group.check_frozen("c", {"agent": {"step_limit": 300}}, root=root, changed=lambda c, p: False)
+    with pytest.raises(SystemExit, match="changed since frozen commit"):
+        run_group.check_frozen("c", config, root=root, changed=lambda c, p: True)
+    with pytest.raises(SystemExit, match="freeze the configuration"):
+        run_group.check_frozen("e", config, root=root)
+
+
+def test_frozen_record_matches_the_repo():
+    import run_group
+
+    frozen = run_group.check_frozen("c", run_group.load_config("configs/group_c.yaml"))
+    assert frozen["frozen_paths"] == ["src/context_compaction", "configs/group_c.yaml", "pyproject.toml", "uv.lock"]

@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import threading
 import time
 import traceback
@@ -56,6 +57,27 @@ def load_config(path):
 
 def config_hash(config):
     return hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
+
+
+def changed_since(commit, paths, root=pins.ROOT):
+    """Whether any of `paths` differs from `commit`, in commits or in the working tree"""
+    result = subprocess.run(["git", "-C", str(root), "diff", "--quiet", commit, "--", *paths])
+    if result.returncode not in (0, 1):
+        raise SystemExit(f"cannot compare against frozen commit {commit[:12]}")
+    return result.returncode == 1
+
+
+def check_frozen(group, config, root=pins.ROOT, changed=changed_since):
+    """The formal set only runs on the configuration frozen after the smoke runs"""
+    path = Path(root) / "configs" / f"frozen_{group}.json"
+    if not path.exists():
+        raise SystemExit(f"no {path.name}: freeze the configuration after the smoke runs first")
+    frozen = json.loads(path.read_text())
+    if config_hash(config) != frozen["config_sha256"]:
+        raise SystemExit("config differs from the frozen one")
+    if changed(frozen["code_commit"], frozen["frozen_paths"]):
+        raise SystemExit(f"code under {frozen['frozen_paths']} changed since frozen commit {frozen['code_commit'][:12]}")
+    return frozen
 
 
 def claim_out_dir(out_dir, config):
@@ -170,6 +192,9 @@ def main(argv=None):
         raise SystemExit("OPENAI_API_KEY missing: set it or CC_CREDENTIALS_DIR (see .env.example)")
 
     config = load_config(args.config or pins.ROOT / "configs" / f"group_{args.group}.yaml")
+    if args.which in ("formal", "all"):
+        frozen = check_frozen(args.group, config)
+        print(f"frozen configuration verified: code {frozen['code_commit'][:12]}, config {frozen['config_sha256'][:12]}")
     out_dir = Path(args.out or pins.ROOT / "results" / args.group)
     sha = claim_out_dir(out_dir, config)
 

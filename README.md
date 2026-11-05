@@ -41,11 +41,11 @@ The plan, metrics and every amendment are pre-registered in [docs/plan.md](docs/
 | M1 | Event log, state schema, patch validator, invalidation, fallback and rebuild | Done |
 | M2 | Context assembly, token budget, `hist`, end-to-end tests on scripted traces | Done for C |
 | M3 | mini-swe-agent integration, one task end to end | C done: two smoke trials, compaction verified on real runs |
-| M4 | 20-task smoke run, tuning, then freeze the config | First pass 16/20; tuned, rerun before freezing |
+| M4 | 20-task smoke run, tuning, then freeze the config | Done: 16/20 on both passes; frozen in `configs/frozen_c.json` |
 | M5 | 100-task run for C, official evaluation | |
 | M6 | Statistics and report | |
 
-So far only the 20 smoke tasks have run, which are for tuning and are never reported as results. The first pass resolved 16 of 20 for $4.37, with 17 compactions on 11 tasks, every patch accepted on the first try and every call under 16K; one task overflowed, which led to the adaptive output cut described in the plan. There are no formal results yet.
+So far only the 20 smoke tasks have run, which are for tuning and are never reported as results. The first pass resolved 16 of 20 for $4.37; one task overflowed, which led to the adaptive output cut described in the plan. The second pass, on the code now frozen, also resolved 16 of 20 for $4.47, with no overflow, 19 compactions all accepted on the first try, and every call under 16K (peak 15,149). The formal run refuses to start unless the config and the code under `src/` match the frozen record. There are no formal results yet.
 
 ## Engineering notes
 

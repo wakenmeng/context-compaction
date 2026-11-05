@@ -1,0 +1,13 @@
+{
+  "group": "c",
+  "frozen": "2026-11-05",
+  "code_commit": "61e345be98742a10e744657a75f0e01e470478c1",
+  "config_sha256": "3521e64c682ab2f817bf5047fe53c9237c0e4e973316d7752055bc801af02508",
+  "model": "openai/gpt-5.6-sol",
+  "frozen_paths": ["src/context_compaction", "configs/group_c.yaml", "pyproject.toml", "uv.lock"],
+  "rule": "the formal run refuses to start if the config hash differs or any frozen path changed since code_commit, committed or not",
+  "smoke_passes": {
+    "results/c-smoke": "first pass, before tuning: 16/20 resolved, 1 ContextOverflow, $4.37",
+    "results/c-smoke2": "second pass, frozen code: 16/20 resolved, no overflow, 19 compactions all accepted first try, peak 15,149 tokens, $4.47"
+  }
+}
