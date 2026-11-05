@@ -317,7 +317,7 @@ class Scripted:
         self.replies = list(replies)
         self.calls = []
 
-    def __call__(self, messages, max_output_tokens):
+    def __call__(self, messages, max_output_tokens, purpose=None):
         self.calls.append(copy.deepcopy(messages))
         return self.replies.pop(0)
 

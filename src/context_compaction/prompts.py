@@ -34,7 +34,8 @@ PATCH = (
     '  {{"op": "set", "field": "next_action", "value": "..."}}\n'
     "]}}\n"
     "Ops: add, update (by id, or by path for changes), set (plan, next_action only).\n"
-    "Stale entries now: {stale}. The state must stay under {cap} tokens.\n\n"
+    "Stale entries now: {stale}. Dead ends whose files changed since they were recorded: {premise}.\n"
+    "The state must stay under {cap} tokens.\n\n"
     "Current state, version {version}:\n{state}"
 )
 

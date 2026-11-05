@@ -45,6 +45,7 @@ class CompactingAgentConfig(AgentConfig):
     recent_events: int = 2
     tool_output_chars: int = 4_000
     max_patch_retries: int = 1
+    min_compaction_output: int = 1_024
     # added to local estimates that no API-reported count backs, e.g. right after a reset
     estimate_margin: float = 0.05
     # on top of an API-anchored count: the local tokenizer misses chat formatting of new
@@ -77,12 +78,12 @@ class CompactingAgent(DefaultAgent):
     def __init__(self, model, env, *, compaction_call=None, count=count_tokens, **kwargs):
         super().__init__(model, env, config_class=CompactingAgentConfig, **kwargs)
         cfg = self.config
-        self.budget = Budget(cfg.hard_limit, cfg.threshold, cfg.state_cap)
+        self.budget = Budget(cfg.hard_limit, cfg.threshold, cfg.state_cap, cfg.min_compaction_output)
         self.count = count
         self.compaction_call = compaction_call or self._litellm_compaction
         self.files = RepoFiles(env)
         self.context: list[dict] = []
-        self._anchor = None  # (messages sent, input tokens the API reported for them)
+        self._anchors = []  # recent (messages sent, input tokens the API reported for them)
 
     # ---------- lifecycle ----------
 
@@ -96,6 +97,7 @@ class CompactingAgent(DefaultAgent):
         self.compactor = Compactor(
             self.store, self.log, self._compaction_model, prompts=C_PROMPTS,
             cap_tokens=self.config.state_cap, max_retries=self.config.max_patch_retries, count=self.count,
+            state_in_context=True,
         )
         self.context = []
         self.extra_template_vars |= {"hist_help": HIST_HELP.format(limit=self.config.tool_output_chars)}
@@ -130,12 +132,13 @@ class CompactingAgent(DefaultAgent):
         last call's, the API-reported count for that prefix is used and only the new
         messages are estimated, with a reserve. Otherwise the estimate carries a margin
         """
-        if self._anchor is not None:
-            sent, actual = self._anchor
-            if len(messages) >= len(sent) and all(a is b for a, b in zip(messages, sent)):
-                new = messages[len(sent):]
-                reserve = self.config.anchor_reserve + self.config.anchor_reserve_per_message * len(new)
-                return actual + context_tokens(new, (), self.count) + reserve
+        matching = [(sent, actual) for sent, actual in self._anchors
+                    if len(messages) >= len(sent) and all(a is b for a, b in zip(messages, sent))]
+        if matching:
+            sent, actual = max(matching, key=lambda m: len(m[0]))
+            new = messages[len(sent):]
+            reserve = self.config.anchor_reserve + self.config.anchor_reserve_per_message * len(new)
+            return actual + context_tokens(new, (), self.count) + reserve
         return math.ceil(context_tokens(messages, TOOLS, self.count) * (1 + self.config.estimate_margin))
 
     def query(self):
@@ -169,11 +172,15 @@ class CompactingAgent(DefaultAgent):
         if cost is None:
             cost = self.cost_of(usage)
         self.cost += cost
-        if sent is not None and usage["input"] > 0:
-            self._anchor = (sent, usage["input"])
+        self._remember(sent, usage)
         self.log.append("model", purpose="agent", estimated_input=tokens, cost=cost, usage=usage,
                         finish_reason=finish_reason(response), format_error=format_error,
                         raw_estimate=context_tokens(sent or [], TOOLS, self.count))
+
+    def _remember(self, sent, usage):
+        """Keep the API's input count for what was sent; compaction requests and retries anchor too"""
+        if sent is not None and usage.get("input", 0) > 0:
+            self._anchors = (self._anchors + [(list(sent), usage["input"])])[-6:]
 
     def cost_of(self, usage):
         """List-price cost from token counts, for calls whose response skipped mini's accounting"""
@@ -193,22 +200,34 @@ class CompactingAgent(DefaultAgent):
         template = getattr(self.model.config, "format_error_template", "{{ error }}")
         return Template(template, undefined=StrictUndefined).render(error=error, actions=[], finish_reason=reason)
 
-    def _compaction_model(self, messages, _max_output_tokens):
-        """Compaction calls get whatever room the hard limit leaves, or the run overflows"""
+    def _compaction_model(self, messages, _max_output_tokens, purpose=None):
+        """Compaction calls get whatever room the hard limit leaves
+
+        A reply cut off by that limit is a failed attempt (the patch cannot parse,
+        so the compactor retries or falls back); a cut-off handoff ends the run,
+        as in the paper, where a compaction that does not finish terminates it
+        """
         self._check_limits(steps=False)
         tokens = self.input_tokens(messages)
         room = self.budget.compaction_output(tokens)
         if room is None:
-            raise self._overflow(f"compaction turn needs {tokens} input tokens, leaving under {self.budget.state_cap} for output")
-        text, usage, cost = self.compaction_call(messages, room)
+            raise self._overflow(f"compaction turn needs {tokens} input tokens, "
+                                 f"leaving under {self.budget.min_compaction_output} for output")
+        sent = list(messages)
+        text, usage, cost, *rest = self.compaction_call(messages, room)
+        reason = rest[0] if rest else None
         self.cost += cost
-        event = self.log.append("model", purpose="compaction", estimated_input=tokens, max_output=room, cost=cost, usage=usage)
+        self._remember(sent, usage)
+        event = self.log.append("model", purpose="compaction", call=purpose, estimated_input=tokens, max_output=room,
+                                cost=cost, usage=usage, finish_reason=reason)
         # full request and raw reply, so failed patches and the decision replay can be inspected later
-        record = {"event": event.id, "max_output": room, "usage": usage, "cost": cost, "reply": text,
-                  "request": [{k: v for k, v in m.items() if k != "extra"} for m in messages]}
+        record = {"event": event.id, "call": purpose, "max_output": room, "usage": usage, "cost": cost, "finish_reason": reason,
+                  "reply": text, "request": [{k: v for k, v in m.items() if k != "extra"} for m in messages]}
         with (Path(self.config.run_dir) / "compactions.jsonl").open("a") as f:
             f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
-        return text
+        if reason == "length" and purpose == "fallback":
+            raise self._overflow(f"the handoff did not finish within {room} output tokens")
+        return text, reason == "length"
 
     def _litellm_compaction(self, messages, max_tokens):
         import litellm
@@ -223,7 +242,8 @@ class CompactingAgent(DefaultAgent):
                     max_tokens=max_tokens, **kwargs,
                 )
         cost = litellm.cost_calculator.completion_cost(response, model=self.model.config.model_name)
-        return response.choices[0].message.content or "", usage_of(response.model_dump()), cost
+        choice = response.choices[0]
+        return choice.message.content or "", usage_of(response.model_dump()), cost, choice.finish_reason
 
     # ---------- compaction ----------
 

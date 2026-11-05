@@ -17,14 +17,17 @@ class Budget:
     hard_limit: int = 16_000
     threshold: int = 12_000
     state_cap: int = 3_000
+    # a compaction turn is attempted with whatever room is left, as in the paper;
+    # below this it cannot produce anything useful, so the run overflows instead
+    min_compaction_output: int = 1_024
 
     def normal_output(self, input_tokens):
         return self.hard_limit - input_tokens
 
     def compaction_output(self, input_tokens):
-        """Output room for a compaction turn, or None when it cannot fit the state"""
+        """Output room for a compaction turn, or None when it is too small to try"""
         room = self.hard_limit - input_tokens
-        return room if room >= self.state_cap else None
+        return room if room >= self.min_compaction_output else None
 
 
 def message_tokens(message, count=count_tokens):

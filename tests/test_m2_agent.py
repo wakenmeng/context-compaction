@@ -66,9 +66,13 @@ class ScriptedCompaction:
         self.calls = []
 
     def __call__(self, messages, max_tokens):
-        self.calls.append((messages, max_tokens))
+        from context_compaction.agent import TOOLS
+
+        self.calls.append((list(messages), max_tokens))
         reply = self.replies.pop(0)
-        return (reply(messages) if callable(reply) else reply), {"input": 50, "cached_input": 0, "output": 20, "reasoning": 0}, 0.02
+        prompt = context.context_tokens(messages, TOOLS, COUNT) + API_SURCHARGE * len(messages)
+        usage = {"input": prompt, "cached_input": 0, "output": 20, "reasoning": 0}
+        return (reply(messages) if callable(reply) else reply), usage, 0.02
 
 
 @pytest.fixture
@@ -438,3 +442,111 @@ def test_unfinished_attempts_are_archived_and_capped(tmp_path):
     assert run_group.prepare_run_dir(tmp_path, "x", max_attempts=3)[1] == 3
     assert run_group.prepare_run_dir(tmp_path, "x", max_attempts=3) is None
     assert sorted(p.name for p in (tmp_path / "attempts").iterdir()) == ["x.1", "x.2", "x.3"]
+
+
+# ---------- compaction room and truncation (after the sympy__sympy-17630 trial) ----------
+
+
+def test_compaction_uses_the_room_left_as_in_the_paper():
+    budget = context.Budget()
+    # the trial's compaction turn: 13,286 input tokens left 2,714, under the old 3K rule it never ran
+    assert budget.compaction_output(13_286) == 2_714
+    assert budget.compaction_output(15_100) is None
+
+
+class Truncating(ScriptedCompaction):
+    """Replies flagged cut off by the output limit for the first `n` calls"""
+
+    def __init__(self, n, *replies):
+        super().__init__(*replies)
+        self.n = n
+
+    def __call__(self, messages, max_tokens):
+        text, usage, cost = super().__call__(messages, max_tokens)
+        return text, usage, cost, ("length" if len(self.calls) <= self.n else "stop")
+
+
+def test_cut_off_patch_is_a_failed_attempt(repo, tmp_path):
+    big = "python3 -c \"print('s' * 3000)\""
+    steps = [["cat a.py"], [big], [big], [SUBMIT]]
+    cut = lambda m: first_patch(m)[:40]  # noqa: E731, what a reply cut off mid-JSON looks like
+    agent = make_agent(repo, tmp_path, steps, Truncating(1, cut, first_patch), threshold=480)
+    assert agent.run("t")["exit_status"] == "Submitted"
+    record = next(e.payload for e in EventLog(tmp_path / "run" / "events.jsonl").events if e.kind == "compaction")
+    assert record["mode"] == "patch" and record["attempts"] == 2
+
+
+def test_cut_off_handoff_ends_the_run(repo, tmp_path):
+    big = "python3 -c \"print('r' * 3000)\""
+    steps = [[edit("1", "4")], [big], [big], [SUBMIT]]
+    agent = make_agent(repo, tmp_path, steps, Truncating(3, "x", "x", "half a handoff"), threshold=480)
+    info = agent.run("t")
+    assert info["exit_status"] == "ContextOverflow" and "+    return 4" in info["submission"]
+
+
+def test_later_patch_prompts_point_at_the_state_in_context(repo, tmp_path):
+    big = "python3 -c \"print('q' * 3000)\""
+    steps = [["cat a.py"], [big], [big], [big], [big], [SUBMIT]]
+
+    def adaptive(messages):
+        version = int(re.search(r"Current state, version (\d+)", messages[-1]["content"]).group(1))
+        if version == 0:
+            return first_patch(messages)
+        return json.dumps({"base_version": version, "ops": [{"op": "set", "field": "next_action", "value": "go"}]})
+
+    compaction = ScriptedCompaction(*[adaptive] * 10)
+    agent = make_agent(repo, tmp_path, steps, compaction)
+    agent.run("t")
+    prompts_sent = [m[-1]["content"] for m, _ in compaction.calls]
+    assert len(prompts_sent) >= 2
+    assert '"done_when": []' in prompts_sent[0], "the empty first state is shown inline"
+    assert all("latest working-state message above" in p and "```json" not in p for p in prompts_sent[1:])
+
+
+def test_cut_off_reply_fails_even_when_it_parses(repo, tmp_path):
+    big = "python3 -c \"print('p' * 3000)\""
+    steps = [["cat a.py"], [big], [big], [SUBMIT]]
+    # complete JSON, but the stop reason says the output limit cut it
+    agent = make_agent(repo, tmp_path, steps, Truncating(1, first_patch, first_patch), threshold=480)
+    agent.run("t")
+    record = next(e.payload for e in EventLog(tmp_path / "run" / "events.jsonl").events if e.kind == "compaction")
+    assert record["attempts"] == 2 and "cut off" in record["errors"][0][0]
+
+
+def test_patch_prompt_lists_dead_ends_with_changed_premises():
+    from context_compaction.compactor import Compactor
+    from context_compaction.event_log import EventLog as Log
+    from context_compaction.state import StateStore
+
+    log = Log()
+    log.snapshot({"a.py": "h1"})
+    log.action("cat a.py", "x", {"a.py": "h1"})  # e1
+    store = StateStore("t")
+    s = store.current()
+    s.update(done_when=["d"], plan=["p"], next_action="n",
+             dead_ends=[{"id": "d1", "approach": "edit a", "reason": "no", "at_event": "e1", "files": ["a.py"]}])
+    store.commit("patch", s)
+    log.action("edit a", "", {"a.py": "h2"})  # e2 changes the dead end's premise
+    seen = []
+
+    def model(messages, max_output_tokens, purpose=None):
+        seen.append(messages[-1]["content"])
+        return json.dumps({"base_version": store.current()["state_version"], "ops": []})
+
+    Compactor(store, log, model, state_in_context=True).compact([], 3000)
+    assert "Dead ends whose files changed since: ['d1']" in seen[0]
+    assert "changed-premise dead ends" in seen[0]
+
+
+def test_retries_anchor_on_the_compaction_calls_api_count(repo, tmp_path):
+    big = "python3 -c \"print('o' * 3000)\""
+    steps = [["cat a.py"], [big], [big], [SUBMIT]]
+    agent = make_agent(repo, tmp_path, steps, ScriptedCompaction("not json", first_patch), threshold=480)
+    agent.run("t")
+    calls = [e.payload for e in EventLog(tmp_path / "run" / "events.jsonl").events
+             if e.kind == "model" and e.payload["purpose"] == "compaction"]
+    first, retry = calls[0], calls[1]
+    # the retry adds the rejected reply and the error message to the first request
+    rows = [json.loads(line) for line in (tmp_path / "run" / "compactions.jsonl").read_text().splitlines()]
+    added = context.context_tokens(rows[1]["request"][len(rows[0]["request"]):], (), COUNT)
+    assert retry["estimated_input"] == first["usage"]["input"] + added + 10 + 4 * 2

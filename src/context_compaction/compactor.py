@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass, field
 
 from . import patch as patching
-from .state import render
+from .state import LIST_FIELDS, render
 from .tokens import count_tokens, truncate_tokens
 
 DEFAULT_PROMPTS = {
@@ -19,7 +19,8 @@ DEFAULT_PROMPTS = {
         "Reply with one JSON object {{\"base_version\": {version}, \"ops\": [...]}} using ops "
         "add, update, set (and remove only when asked to shrink).\n"
         "Entries marked stale had their files change after they were recorded; re-check them "
-        "before relying on them.\nStale entries: {stale}\nState cap: {cap} tokens.\n\n"
+        "before relying on them.\nStale entries: {stale}\nDead ends whose files changed since: {premise}\n"
+        "State cap: {cap} tokens.\n\n"
         "Current state (version {version}):\n{state}"
     ),
     "rebuild": (
@@ -87,10 +88,19 @@ def parse_json(text):
 
 
 class Compactor:
-    def __init__(self, store, log, model, prompts=None, cap_tokens=3000, max_retries=1, count=count_tokens):
+    def __init__(self, store, log, model, prompts=None, cap_tokens=3000, max_retries=1, count=count_tokens,
+                 state_in_context=False):
         self.store, self.log, self.model = store, log, model
+        # when the agent's context already shows the latest state (it does after every
+        # reset), the patch prompt points at it instead of repeating up to cap_tokens
+        self.state_in_context = state_in_context
         self.prompts = {**DEFAULT_PROMPTS, **(prompts or {})}
         self.cap, self.max_retries, self.count = cap_tokens, max_retries, count
+
+    def _ask(self, messages, max_output_tokens, purpose):
+        """Model replies are text, or (text, truncated) when the caller knows the stop reason"""
+        result = self.model(messages, max_output_tokens, purpose=purpose)
+        return result if isinstance(result, tuple) else (result, False)
 
     def consecutive_fallbacks(self):
         n = 0
@@ -119,15 +129,25 @@ class Compactor:
             if base != self.store.current():
                 base = self.store.commit("invalidate", base)
             stale = [i["id"] for n in ("facts", "checks") for i in base[n] if i.get("status") == "stale"]
+            premise = [d["id"] for d in base["dead_ends"] if d.get("premise_changed")]
+            shown = render(base)
+            if self.state_in_context and any(base[n] for n in LIST_FIELDS + ("plan",)):
+                shown = ("the latest working-state message above; since it was shown, the harness only marked "
+                         "the stale entries and changed-premise dead ends listed here")
             request = self.prompts["patch"].format(
-                version=base["state_version"], stale=stale or "none", cap=self.cap, state=render(base)
+                version=base["state_version"], stale=stale or "none", premise=premise or "none",
+                cap=self.cap, state=shown,
             )
 
         messages = list(context) + [{"role": "user", "content": request}]
         errors, shrink = [], False
+        purpose = "rebuild" if rebuilding else "patch"
         for attempt in range(1, self.max_retries + 2):
-            reply = self.model(messages, max_output_tokens)
+            reply, truncated = self._ask(messages, max_output_tokens, purpose)
             try:
+                if truncated:
+                    # even if it parses, a cut-off reply may have lost ops or fields
+                    raise ValueError("reply was cut off by the output limit; send a shorter one")
                 proposal = parse_json(reply)
                 if rebuilding:
                     new = patching.rebuild(base, proposal, self.log, self.cap, self.count)
@@ -156,7 +176,8 @@ class Compactor:
 
     def _fallback(self, context, max_output_tokens, attempts, errors, marked):
         messages = list(context) + [{"role": "user", "content": self.prompts["fallback"]}]
-        recap = truncate_tokens(self.model(messages, max_output_tokens), self.cap)
+        text, _ = self._ask(messages, max_output_tokens, "fallback")
+        recap = truncate_tokens(text, self.cap)
         state = self.store.last_valid()
         state["fallback_recap"] = recap
         state = self.store.commit("fallback", state)
