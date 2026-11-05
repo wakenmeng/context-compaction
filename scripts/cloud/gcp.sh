@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 # Manage the x86 VM from the Mac: create, push code and key, run jobs, pull results
 # Usage: scripts/cloud/gcp.sh <create|setup|push|run|logs|pull|ssh|stop|start|delete> [args]
+# Settings come from the environment or the repo's gitignored .env (see .env.example)
 set -euo pipefail
 
-# dedicated experiment project, independent of gcloud's default; override with CC_PROJECT
-PROJECT=${CC_PROJECT:-your-gcp-project-id}
+ROOT=$(cd "$(dirname "$0")/../.." && pwd)
+if [ -f "$ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$ROOT/.env"
+  set +a
+fi
+
+# a dedicated project keeps the experiment's billing separate and cleanup to one delete
+PROJECT=${CC_PROJECT:?set CC_PROJECT to your GCP project id, e.g. in .env}
 ZONE=${CC_ZONE:-us-central1-b}
 VM=${CC_VM:-cc-x86}
 MACHINE=${CC_MACHINE:-n2-standard-16}
 DISK_GB=${CC_DISK_GB:-500}
-KEY_FILE=${CC_KEY_FILE:-$HOME/.config/context-compaction/openai.txt}
+KEY_FILE=${CC_KEY_FILE:-${CC_CREDENTIALS_DIR:+$CC_CREDENTIALS_DIR/openai.txt}}
 
-ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 HOST="$VM.$ZONE.$PROJECT"
 REMOTE=context-compaction
+# where the VM keeps its copy of the key, outside the repo
+VM_KEY_DIR='$HOME/.config/context-compaction'
 G=(gcloud --project "$PROJECT")
 
 ssh_config() {
@@ -32,13 +42,20 @@ case "$cmd" in
     ;;
   push)
     ssh_config
+    if [ -z "$KEY_FILE" ] || [ ! -f "$KEY_FILE" ]; then
+      echo "no API key file: set CC_KEY_FILE or CC_CREDENTIALS_DIR (see .env.example)" >&2
+      exit 1
+    fi
+    # local-only files (.env, CLAUDE.md) stay on this machine
     rsync -az --delete \
       --exclude .venv/ --exclude data/ --exclude results/ --exclude logs/ \
       --exclude '__pycache__/' --exclude '*.pdf' --exclude .DS_Store \
+      --exclude .env --exclude CLAUDE.md \
       "$ROOT/" "$HOST:$REMOTE/"
-    # key goes outside the repo, readable only by the VM user
-    # via stdin, so it works with macOS openrsync and never appears in argv
-    ssh "$HOST" 'umask 077 && d=~/.config/context-compaction && mkdir -p $d && cat > $d/openai.txt && chmod 600 $d/openai.txt' < "$KEY_FILE"
+    # the key travels via stdin, so it never appears in argv, and lands readable only by the VM user;
+    # the VM's own .env points the code at it
+    ssh "$HOST" "umask 077 && mkdir -p $VM_KEY_DIR && cat > $VM_KEY_DIR/openai.txt && chmod 600 $VM_KEY_DIR/openai.txt \
+      && echo CC_CREDENTIALS_DIR=$VM_KEY_DIR > $REMOTE/.env" < "$KEY_FILE"
     ;;
   setup)
     "$0" push

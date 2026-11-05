@@ -11,6 +11,7 @@ SECRET = "sk-test-0123456789abcdef"
 
 @pytest.fixture
 def healthy(monkeypatch, tmp_path):
+    monkeypatch.setattr(credentials, "DOTENV", tmp_path / "no.env")  # never read the developer's .env
     monkeypatch.setenv("CC_CREDENTIALS_DIR", str(tmp_path / "creds"))
     monkeypatch.setenv("OPENAI_API_KEY", SECRET)
     monkeypatch.setattr(check_env, "check_packages", lambda: [(True, "pkgs ok")])
@@ -83,14 +84,14 @@ def test_key_loaded_from_file_is_not_printed(healthy, monkeypatch, tmp_path, cap
 def test_environment_key_wins_over_file(tmp_path):
     (tmp_path / "openai.txt").write_text("from-file")
     env = {"CC_CREDENTIALS_DIR": str(tmp_path), "OPENAI_API_KEY": "from-env"}
-    assert credentials.load(env) == {"OPENAI_API_KEY": "env"}
+    assert credentials.load(env, dotenv=False) == {"OPENAI_API_KEY": "env"}
     assert env["OPENAI_API_KEY"] == "from-env"
 
 
 def test_empty_key_file_counts_as_missing(tmp_path):
     (tmp_path / "openai.txt").write_text("\n")
     env = {"CC_CREDENTIALS_DIR": str(tmp_path)}
-    assert credentials.load(env) == {"OPENAI_API_KEY": None}
+    assert credentials.load(env, dotenv=False) == {"OPENAI_API_KEY": None}
     assert "OPENAI_API_KEY" not in env
 
 
@@ -117,3 +118,20 @@ def test_probe_failure_shows_stderr(monkeypatch):
 
     monkeypatch.setattr(check_env.subprocess, "run", fake_run)
     assert check_env.check_docker()[-1] == (False, "amd64 probe image: exec format error")
+
+
+def test_no_default_credentials_directory(tmp_path):
+    env = {}
+    assert credentials.load(env, dotenv=tmp_path / "missing.env") == {"OPENAI_API_KEY": None}
+    assert credentials.credentials_dir(env) is None
+
+
+def test_dotenv_fills_unset_values_only(tmp_path):
+    keydir = tmp_path / "keys"
+    keydir.mkdir()
+    (keydir / "openai.txt").write_text(SECRET + "\n")
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(f"# local settings\nexport CC_CREDENTIALS_DIR='{keydir}'\nCC_ZONE=us-east1-b\n")
+    env = {"CC_ZONE": "europe-west1-b"}
+    assert credentials.load(env, dotenv=dotenv) == {"OPENAI_API_KEY": "file"}
+    assert env["CC_ZONE"] == "europe-west1-b" and env["OPENAI_API_KEY"] == SECRET

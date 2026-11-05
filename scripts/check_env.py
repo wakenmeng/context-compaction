@@ -46,7 +46,7 @@ def check_packages():
 def check_api_key(env=os.environ):
     # only the source is reported, the value is never formatted anywhere
     source = credentials.load(env)["OPENAI_API_KEY"]
-    where = {"env": "set from environment", "file": f"loaded from {credentials.credentials_dir(env)}"}
+    where = {"env": "set from environment", "file": "loaded from CC_CREDENTIALS_DIR"}
     return source is not None, "OPENAI_API_KEY " + where.get(source, "missing")
 
 

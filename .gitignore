@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .env
 .env.*
+!.env.example
 results/*
 !results/.gitkeep
 # gold summaries are kept, per-instance harness logs are not

@@ -2,11 +2,36 @@
 
 [English](README.md) | 中文
 
-针对编程 agent 的 Markov 状态压缩实验，基于论文 [You don't need long context](https://arxiv.org/pdf/2611.05306)（arXiv 2611.05306）
+**编程 agent 能不能在 16K 上下文里工作，同时不忘掉已经弄清楚的事？** 这个项目要验证一种结构化、可校验的做法，替代现在 agent 压缩上下文时写的文本交接
 
-论文的做法是定期把历史重写成一段文本交接（EoCC），以此保持短上下文。我们要验证：在同样的 16K/12K 预算下，改用按字段增量更新、带证据和失效规则的结构化工作状态，能否减少信息丢失和重复工作，同时不降低成功率
+## 为什么做
 
-完整方案见 [docs/plan.md](docs/plan.md)。这是预登记版本，在任何 agent 运行之前提交，成功与失败的判定以它为准
+论文 [You don't need long context](https://arxiv.org/pdf/2611.05306)（arXiv 2611.05306）表明：前沿模型只要频繁压缩、保持短上下文，在 SWE-bench Verified 上的准确率就能接近全历史基线。它的压缩方式是每次把整段历史重写成一份新的文本交接，论文自己也承认留下了三个空白：
+
+- 多次重写，损失会累积
+- 模型不知道自己忘了什么，光有检索工具解决不了
+- 只看最终成功率，没有检验压缩状态能否替代完整历史
+
+## 思路
+
+把压缩看成维护一个 **Markov 工作状态**：给定状态和可访问的环境，下一步决策不再需要完整历史
+
+- **结构化状态，按字段 patch。** 目标、事实、改动、检查、死胡同、计划、下一步都放在一份 JSON 状态里。模型提交 patch，harness 校验后才写入，每个版本都保留，不会被悄悄重写
+- **harness 能核实的证据。** 事实和检查要引用事件日志里的事件，日志只追加、保存在容器外。harness 在每个动作之后对仓库文件做哈希，知道文件什么时候变过，并自动把依赖它的事实和检查标为 stale。没有更新的观察，模型无法让过期证据恢复有效
+- **指针代替复制。** 大段输出留在日志里，模型需要时用 `hist` 读取有长度上限的片段
+- **弹性上下文。** 平时 16K/12K；分块读取解决不了时，agent 可以临时扩到 48K 或 128K，几步之后再压回常态
+
+## 实验
+
+| 组 | 上下文策略 | 压缩后保留什么 |
+| --- | --- | --- |
+| B | 论文 EoCC 基线，固定 16K，12K 触发压缩 | 用论文附录 G.1 提示词写的文本交接 |
+| C | 同样 16K/12K | 经过校验的结构化状态、事件日志和 `hist` |
+| E | C 加上临时扩容，每题最多 3 次 | 同 C |
+
+正式实验比较 **B 和 E**：同样的 100 道 SWE-bench Verified 题、同一个模型、同样的步数上限。C 已经实现，用来验证代码。E 同时改变了状态写法和上下文预算，所以 E 胜出只能说明整套方案更好，不能归功于其中某一部分
+
+假设和判定规则在任何 agent 运行之前就预登记在 [docs/plan.md](docs/plan.md)：E 少解的题不能超过 B 3 题；压缩后的重复工作要少于 B（对冻结的“重复动作”定义做配对 bootstrap）；费用比要低于冒烟前确定的阈值。不满足这些规则的结果也会如实报告
 
 ## 进度
 
@@ -14,94 +39,78 @@
 | --- | --- | --- |
 | M0 | 抽样、锁定环境、x86 gold 验证 | 已完成 |
 | M1 | 事件日志、状态 schema、patch 校验器、失效规则、回退和重建 | 已完成 |
-| M2 | 上下文组装、token 预算、`hist` 检索、录制 trace 回放 | 下一步 |
+| M2 | 上下文组装、token 预算、`hist`、录制 trace 回放 | 下一步 |
 | M3 | 接入 mini-swe-agent，B/C/E 配置，1 题端到端 | |
 | M4 | 20 题冒烟，调参后冻结配置 | |
-| M5 | 100 题正式实验和官方评测 | |
-| M6 | 决策回放、统计分析、报告 | |
+| M5 | B 和 E 各跑 100 题，官方评测 | |
+| M6 | 统计分析和报告 | |
 
-目前还没有跑过任何 agent
+还没有跑过任何 agent，所以目前没有结果
 
-## 实验组
+## 工程说明
 
-| 组 | 上下文策略 | 压缩后保留什么 |
-| --- | --- | --- |
-| B | 论文 EoCC，固定 16K 上限，12K 触发压缩 | 用论文附录 G.1 提示词写的文本交接 |
-| C | 同样 16K/12K | 结构化状态 JSON：模型提交字段级 patch，harness 校验后才写入；完整历史进事件日志，模型可用 `hist` 查询 |
-| E | C 加上临时扩容到 48K 或 128K，每题最多 3 次 | 同 C |
+- **无偏样本。** 正式集 100 题按仓库分层，配额用随机化系统取整，每题入样概率都恰好是 1/5，直接取平均就是 500 题的无偏估计。排序用 sha256，与 Python 版本无关（[sample_instances.py](scripts/sample_instances.py)）
+- **固定输入。** 数据集固定到 Hugging Face 的 revision 和 parquet 的 sha256，样本里记录了覆盖每条记录全部字段的指纹。依赖用 `uv.lock` 锁定
+- **先证明环境可用，再跑 agent。** 抽中的 120 题都在 x86 上用 gold 补丁跑过官方评测，119 题通过。唯一失败的那题需要访问外网，在任何运行之前就冻结为排除（[env_unsolvable.json](configs/env_unsolvable.json)）
+- **模型钻不了空子的状态。** 证据的新旧按引用的最新动作判断，不看模型自己写的时间点；stale 条目无论绕道什么状态都保留重新验证门槛；格式错误的 patch 一律是拒绝，不会让程序崩溃（[patch.py](src/context_compaction/patch.py)）
+- **对抗式评审。** 方案和 M1 代码由另一个模型（OpenAI Codex）反复评审，直到没有阻塞问题。每条意见都先复现再修，并配回归测试；M1 的几轮评审堵上了十几种模型可能绕过证据规则的方式
 
-三组都会实现。正式实验只比较 B 和 E，C 用来验证代码。这个范围调整会在任何运行之前写进预登记方案
-
-## 固定版本
-
-所有固定值集中在 `src/context_compaction/pins.py`，依赖全部由 `uv.lock` 锁定
-
-| 组件 | 版本 | 说明 |
-| --- | --- | --- |
-| Python | 3.12 | 只锁一个解释器，锁文件只有一份解析结果 |
-| mini-swe-agent | 2.4.0 | 论文只写 v2.4，小版本是我们的选择 |
-| swebench | 5.0.2 | 官方评测；论文未写版本 |
-| 数据集 | SWE-bench/SWE-bench_Verified @ `78f471bf` | 500 题，parquet sha256 写在 pins.py |
-
-数据集不用 `princeton-nlp/SWE-bench_Verified`：swebench 5.x 评测需要 `image`、`eval_script`、`log_parser` 字段，只有 `SWE-bench/` 版本有。两者 500 个 ID、题面、补丁、base commit 完全相同；`PASS_TO_PASS` 在 `astropy__astropy-7606`、`django__django-10097` 两题上有删减。agent 运行和评测都读同一个本地快照 `data/SWE-bench_Verified`
-
-## 抽样
-
-`configs/instances.json` 已生成并冻结，种子 20261104
-
-- 正式集 100 题：按仓库分层，配额用随机化系统取整，每题入样概率都是 1/5，直接取平均就是 500 题成功率的无偏估计。单次样本里小仓库可能为 0（本次 Flask、Seaborn 为 0），这是抽样波动，不是偏差
-- 冒烟集 20 题：从剩余 400 题中抽取，每个仓库先抽 1 题，其余按比例分配。只用于调参和环境验证，不进入任何估计
-- `records_sha256` 覆盖每条记录的全部字段，数据内容有任何变化都能检测到
-
-## gold 验证
-
-在 x86 上用 gold 补丁对抽中的 120 题跑官方评测，119 题通过。`psf__requests-1724`（冒烟集）5 次都没通过，原因是它的 `PASS_TO_PASS` 测试要访问外网 httpbin.org（429 限流和证书过期）。它已冻结在 `configs/env_unsolvable.json`，在所有组的主分析中排除。正式集 100 题全部通过。汇总在 `results/gold/`
-
-## 代码
+## 目录
 
 | 路径 | 内容 |
 | --- | --- |
-| `src/context_compaction/event_log.py` | 只追加的事件日志，保存在容器外，记录每个动作改了哪些文件 |
+| `docs/plan.md` | 预登记方案：假设、指标、统计方法、里程碑 |
+| `src/context_compaction/event_log.py` | 只追加的事件日志，记录每个动作改了哪些文件 |
 | `src/context_compaction/state.py` | 状态 schema 和带版本的存储 |
-| `src/context_compaction/patch.py` | patch 校验、过期证据的失效、回退后的重建 |
+| `src/context_compaction/patch.py` | patch 校验、失效、回退后的重建 |
 | `src/context_compaction/compactor.py` | 一次压缩：patch、共用一次重试、文本回退、重建 |
-| `src/context_compaction/pins.py`、`credentials.py`、`tokens.py` | 固定值、API key 读取、token 计数 |
-| `scripts/` | 抽样、数据下载、环境检查、gold 评测、云主机管理 |
-| `tests/` | 单元测试（`pytest`） |
+| `src/context_compaction/pins.py` | 固定的版本和数据快照 |
+| `scripts/` | 抽样、数据下载、环境检查、gold 评测、云主机 |
+| `configs/` | 冻结的题目名单和排除名单 |
+| `results/gold/` | gold 评测汇总 |
+| `tests/` | 单元测试 |
 
-## 运行环境
+## 复现
 
-所有 Docker 任务（gold 评测、冒烟、正式实验、官方评测）都在 GCP 的 x86 云主机上跑。SWE-bench 镜像都是 x86_64，在 Apple Silicon 的 Mac 上要靠仿真运行，环境失败和模型失败就分不清了。Mac 只用来开发和跑单元测试
+开发和单元测试用 [uv](https://docs.astral.sh/uv/)，在任何机器上都能跑：
 
-云主机默认配置：`n2-standard-16`（16 vCPU / 64 GB），Ubuntu 24.04 amd64，500 GB pd-balanced。用 `CC_PROJECT` 指定你的 GCP 项目 ID；`CC_ZONE`、`CC_VM`、`CC_MACHINE`、`CC_DISK_GB` 可覆盖 `scripts/cloud/gcp.sh` 里的其余默认值。用一个专用项目跑实验，结束后一条 `gcloud projects delete` 就能清掉所有资源
+```bash
+uv sync --frozen --extra dev
+uv run pytest
+uv run python scripts/fetch_dataset.py
+```
+
+与本机相关的设置放在被 gitignore 的 `.env` 里，从模板开始：
+
+```bash
+cp .env.example .env
+```
+
+API key 读环境变量 `OPENAI_API_KEY`，或者 `CC_CREDENTIALS_DIR` 目录下的 `openai.txt`。key 要放在仓库之外
+
+凡是要跑 SWE-bench 容器的步骤都需要 x86：镜像都是 x86_64，在 Apple Silicon 上靠仿真运行，环境失败会被误判成模型失败。`scripts/cloud/gcp.sh` 在 `CC_PROJECT` 指定的项目里管理一台 GCP 云主机（默认 `n2-standard-16`、Ubuntu 24.04、500 GB）：
 
 ```bash
 scripts/cloud/gcp.sh create
 scripts/cloud/gcp.sh setup
 CC_JOB=check scripts/cloud/gcp.sh run python scripts/check_env.py
-CC_JOB=gold-smoke scripts/cloud/gcp.sh run python scripts/gold_eval.py --set smoke --workers 8
-scripts/cloud/gcp.sh logs gold-smoke
+CC_JOB=gold scripts/cloud/gcp.sh run python scripts/gold_eval.py --set all --workers 8
+scripts/cloud/gcp.sh logs gold
 scripts/cloud/gcp.sh pull
 scripts/cloud/gcp.sh stop
 ```
 
-- `setup` 会先 `push`：用 rsync 同步代码（含 `.git`，不含 `.venv`、`data`、`results`），把 API key 文件（`CC_KEY_FILE`）复制到云主机（权限 600），然后安装 Docker、uv 和锁定的依赖，跑单测并下载数据快照
-- `run` 在 tmux 里后台执行，断开 SSH 不影响；日志写在云主机的 `logs/<CC_JOB>.log`
-- 改了代码之后先 `push` 再 `run`；结果用 `pull` 拉回本地的 `results/`
-- 不用的时候 `stop`，停机后只收磁盘费；`delete` 会连磁盘一起删掉
-- `gcloud compute config-ssh` 会往 `~/.ssh/config` 写入 `cc-x86.<zone>.<project>` 主机条目
-- Docker 已配置 `mirror.gcr.io` 镜像缓存；如果拉镜像遇到 429 限流，在云主机上执行一次 `docker login`
+- `setup` 同步代码（不含 `.env`、数据和结果），把 key 文件以 600 权限复制到云主机，安装 Docker、uv 和锁定的依赖，跑单测并下载数据
+- `run` 在云主机的 tmux 里启动任务；`pull` 把 `results/` 拉回本地；`stop` 后只收磁盘费
+- `check_env.py` 任何一项失败都返回非零，不会打印 key。`gold_eval.py` 有 gold 补丁没通过时返回非零；`--run-id` 可以开一次全新的运行
 
-## 在 Mac 上开发
+## 固定版本
 
-```bash
-uv sync --frozen --extra dev
-source .venv/bin/activate
-pytest
-python scripts/fetch_dataset.py
-```
+| 组件 | 版本 | 说明 |
+| --- | --- | --- |
+| Python | 3.12 | 只锁一个解释器，锁文件只有一份解析结果 |
+| mini-swe-agent | 2.4.0 | 论文写的是 v2.4 |
+| swebench | 5.0.2 | 论文没写版本 |
+| 数据集 | SWE-bench/SWE-bench_Verified @ `78f471bf` | 500 题 |
 
-- API key：优先读环境变量 `OPENAI_API_KEY`，没有时读 `CC_CREDENTIALS_DIR` 目录下的 `openai.txt`（一行裸 key）。key 要放在仓库之外
-- `check_env.py`：快速检查，任何一项失败都返回非零，不会打印密钥
-- `gold_eval.py`：用 gold 补丁跑官方评测，列出没有 resolved 的题，有这样的题时返回非零。先跑冒烟集，再跑全部 120 题；同一个 `--set` 重跑时会跳过已完成的题，`--run-id` 可以开一次全新的运行。结果写在 `results/gold/`。重跑 2 次仍不通过的题写入 `configs/env_unsolvable.json`，在跑 agent 之前冻结
-- `sample_instances.py`：重新运行时如果结果和已冻结的文件不同，会拒绝覆盖
+用 `SWE-bench/SWE-bench_Verified` 而不是 `princeton-nlp/SWE-bench_Verified`，是因为 swebench 5.x 需要前者的 `image`、`eval_script`、`log_parser` 字段。两者 500 个 ID、题面、补丁、base commit 完全相同；`PASS_TO_PASS` 在 `astropy__astropy-7606`、`django__django-10097` 两题上有删减
