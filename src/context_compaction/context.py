@@ -4,6 +4,7 @@ Context length is the full input of one call: system prompt, tool schema and
 all messages. Output limits include reasoning tokens
 """
 import json
+import math
 from dataclasses import dataclass
 
 from .tokens import count_tokens
@@ -65,7 +66,7 @@ def recent_actions(log, n):
     return [e for e in log.events if e.kind == "action"][-n:] if n else []
 
 
-def reset_messages(head, body, recent, limit, budget, tools=(), count=count_tokens):
+def reset_messages(head, body, recent, limit, budget, tools=(), count=count_tokens, margin=0.0):
     """Context after a compaction: system + task, the state or handoff, recent events
 
     Drops recent events one by one until the reset fits under the threshold;
@@ -78,7 +79,7 @@ def reset_messages(head, body, recent, limit, budget, tools=(), count=count_toke
         if recent:
             parts.append("Most recent events (oldest first):\n\n" + "\n\n".join(render_event(e, limit) for e in recent))
         messages = list(head) + [{"role": "user", "content": "\n\n".join(parts)}]
-        if context_tokens(messages, tools, count) <= budget.threshold:
+        if math.ceil(context_tokens(messages, tools, count) * (1 + margin)) <= budget.threshold:
             return messages, dropped
         if not recent:
             return None, dropped

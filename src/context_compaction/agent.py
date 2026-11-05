@@ -9,6 +9,7 @@ are answered by the harness from that log
 """
 import json
 import logging
+import math
 import subprocess
 import time
 from pathlib import Path
@@ -44,6 +45,12 @@ class CompactingAgentConfig(AgentConfig):
     recent_events: int = 2
     tool_output_chars: int = 4_000
     max_patch_retries: int = 1
+    # added to local estimates that no API-reported count backs, e.g. right after a reset
+    estimate_margin: float = 0.05
+    # on top of an API-anchored count: the local tokenizer misses chat formatting of new
+    # messages (33-163 tokens per step in the first real run)
+    anchor_reserve: int = 100
+    anchor_reserve_per_message: int = 40
 
 
 def finish_reason(response):
@@ -75,6 +82,7 @@ class CompactingAgent(DefaultAgent):
         self.compaction_call = compaction_call or self._litellm_compaction
         self.files = RepoFiles(env)
         self.context: list[dict] = []
+        self._anchor = None  # (messages sent, input tokens the API reported for them)
 
     # ---------- lifecycle ----------
 
@@ -114,23 +122,40 @@ class CompactingAgent(DefaultAgent):
         if 0 < self.config.wall_time_limit_seconds <= int(time.time() - self._start_time):
             raise TimeExceeded({"role": "exit", "content": "TimeExceeded", "extra": {"exit_status": "TimeExceeded", "submission": ""}})
 
+    def input_tokens(self, messages):
+        """Input size of a call with `messages`
+
+        The local tokenizer undercounts chat formatting (about 8% at 9K tokens in the
+        first real run, growing with tool calls), so when these messages extend the
+        last call's, the API-reported count for that prefix is used and only the new
+        messages are estimated, with a reserve. Otherwise the estimate carries a margin
+        """
+        if self._anchor is not None:
+            sent, actual = self._anchor
+            if len(messages) >= len(sent) and all(a is b for a, b in zip(messages, sent)):
+                new = messages[len(sent):]
+                reserve = self.config.anchor_reserve + self.config.anchor_reserve_per_message * len(new)
+                return actual + context_tokens(new, (), self.count) + reserve
+        return math.ceil(context_tokens(messages, TOOLS, self.count) * (1 + self.config.estimate_margin))
+
     def query(self):
         self._check_limits()
-        tokens = context_tokens(self.context, TOOLS, self.count)
+        tokens = self.input_tokens(self.context)
         if tokens > self.budget.threshold:
             self._compact()
             self._check_limits()
-            tokens = context_tokens(self.context, TOOLS, self.count)
+            tokens = self.input_tokens(self.context)
         self.n_calls += 1
+        sent = list(self.context)
         try:
             message = self.model.query(self.context, max_tokens=self.budget.normal_output(tokens))
         except FormatError as e:
             # the call was made and billed even though its output is unusable
             response = (e.messages[0].get("extra") or {}).get("response") if e.messages else None
-            self._record_agent_call(tokens, response if isinstance(response, dict) else None, None, format_error=True)
+            self._record_agent_call(tokens, response if isinstance(response, dict) else None, None, format_error=True, sent=sent)
             raise
         response = message.get("extra", {}).get("response")
-        self._record_agent_call(tokens, response, message.get("extra", {}).get("cost"))
+        self._record_agent_call(tokens, response, message.get("extra", {}).get("cost"), sent=sent)
         if finish_reason(response) == "length":
             # a cut-off reply is never executed, even if a complete tool call came through
             # the raw reply stays in the saved trajectory; extra is never sent to the model
@@ -139,13 +164,16 @@ class CompactingAgent(DefaultAgent):
         self.add_messages(message)
         return message
 
-    def _record_agent_call(self, tokens, response, cost, format_error=False):
+    def _record_agent_call(self, tokens, response, cost, format_error=False, sent=None):
         usage = usage_of(response)
         if cost is None:
             cost = self.cost_of(usage)
         self.cost += cost
+        if sent is not None and usage["input"] > 0:
+            self._anchor = (sent, usage["input"])
         self.log.append("model", purpose="agent", estimated_input=tokens, cost=cost, usage=usage,
-                        finish_reason=finish_reason(response), format_error=format_error)
+                        finish_reason=finish_reason(response), format_error=format_error,
+                        raw_estimate=context_tokens(sent or [], TOOLS, self.count))
 
     def cost_of(self, usage):
         """List-price cost from token counts, for calls whose response skipped mini's accounting"""
@@ -168,7 +196,7 @@ class CompactingAgent(DefaultAgent):
     def _compaction_model(self, messages, _max_output_tokens):
         """Compaction calls get whatever room the hard limit leaves, or the run overflows"""
         self._check_limits(steps=False)
-        tokens = context_tokens(messages, TOOLS, self.count)
+        tokens = self.input_tokens(messages)
         room = self.budget.compaction_output(tokens)
         if room is None:
             raise self._overflow(f"compaction turn needs {tokens} input tokens, leaving under {self.budget.state_cap} for output")
@@ -212,13 +240,13 @@ class CompactingAgent(DefaultAgent):
             )
         messages, dropped = reset_messages(
             head, body, recent_actions(self.log, self.config.recent_events),
-            self.config.tool_output_chars, self.budget, TOOLS, self.count,
+            self.config.tool_output_chars, self.budget, TOOLS, self.count, margin=self.config.estimate_margin,
         )
         if messages is None:
             raise self._overflow("the reset context alone is over the threshold")
         self.context = messages
         self.log.append("note", what="context_reset", mode=result.mode, dropped_events=dropped,
-                        tokens=context_tokens(messages, TOOLS, self.count))
+                        tokens=self.input_tokens(messages))
 
     def _current_diff(self):
         """Tracked changes only: new helper or repro files are not part of a forced submission"""

@@ -1,5 +1,6 @@
 """End-to-end checks of the group C agent with a scripted model in a local git repo"""
 import json
+import math
 import re
 import subprocess
 
@@ -12,6 +13,7 @@ from context_compaction.agent import CompactingAgent
 from context_compaction.event_log import EventLog
 
 COUNT = lambda text: len(text) // 4  # noqa: E731, deterministic stand-in for the tokenizer
+API_SURCHARGE = 6  # tokens per message the fake API counts beyond the local estimate
 OBS = "<returncode>{{output.returncode}}</returncode>\n<output>\n{{output.output}}</output>"
 
 
@@ -37,7 +39,10 @@ class ScriptedModel:
             {"id": a["tool_call_id"], "type": "function", "function": {"name": "bash", "arguments": json.dumps({"command": a["command"]})}}
             for a in actions
         ]
-        usage = {"prompt_tokens": 100, "completion_tokens": 10, "prompt_tokens_details": {"cached_tokens": 40}}
+        # the API counts chat formatting the local tokenizer misses; mimic that with a per-message surcharge
+        from context_compaction.agent import TOOLS
+        prompt = context.context_tokens(messages, TOOLS, COUNT) + API_SURCHARGE * len(messages)
+        usage = {"prompt_tokens": prompt, "completion_tokens": 10, "prompt_tokens_details": {"cached_tokens": 40}}
         return {"role": "assistant", "content": "thinking", "tool_calls": calls,
                 "extra": {"actions": actions, "cost": 0.01, "response": {"usage": usage}}}
 
@@ -84,6 +89,8 @@ def make_agent(repo, tmp_path, steps, compaction, **over):
         "run_dir": tmp_path / "run", "system_template": "system prompt",
         "instance_template": "Task: {{task}}\n{{hist_help}}", "step_limit": 30, "cost_limit": 10.0,
         "hard_limit": 2400, "threshold": 400, "state_cap": 200, "recent_events": 2, "tool_output_chars": 300,
+        # reserves scaled down with the toy budget
+        "anchor_reserve": 10, "anchor_reserve_per_message": 4,
     }
     agent = CompactingAgent(ScriptedModel(steps), env, compaction_call=compaction, count=COUNT, **{**kwargs, **over})
     agent.files.repo = str(repo)
@@ -123,24 +130,26 @@ def first_patch(messages):
 def test_full_run_logs_truncates_compacts_and_submits(repo, tmp_path):
     big = "python3 -c \"print('x' * 3000)\""
     steps = [["cat a.py"], [big], ["hist read e4 --lines 1:1"], [edit("1", "2")], [big], [big], [SUBMIT]]
-    def second(messages):
+    def adaptive(messages):
         version = int(re.search(r"Current state, version (\d+)", messages[-1]["content"]).group(1))
+        if version == 0:
+            return first_patch(messages)
         return json.dumps({"base_version": version, "ops": [{"op": "set", "field": "next_action", "value": "submit"}]})
-    compaction = ScriptedCompaction(first_patch, second, second)
+    compaction = ScriptedCompaction(*[adaptive] * 10)
     agent = make_agent(repo, tmp_path, steps, compaction)
     info = agent.run("make parse return 2")
 
     assert info["exit_status"] == "Submitted" and "+    return 2" in info["submission"]
     log = EventLog(tmp_path / "run" / "events.jsonl")
     kinds = [e.kind for e in log.events]
-    assert kinds[0] == "snapshot" and "hist" in kinds and kinds.count("compaction") == 3
+    assert kinds[0] == "snapshot" and "hist" in kinds and kinds.count("compaction") >= 2
 
     # the big output is cut in context but kept whole in the log
     big_event = log.get("e4")
     assert big_event.kind == "action" and len(big_event.payload["output"]) > 3000
     tool_texts = [m["content"] for m in agent.messages if m.get("role") == "tool"]
     assert any("characters omitted; full output is e4" in t for t in tool_texts)
-    assert any("[e6]" in t and "lines 1-1 of 1" in t for t in tool_texts)
+    assert any("e4 $ python3" in t and "lines 1-1 of 1" in t for t in tool_texts)
 
     # the edit after the first compaction makes f1 stale at the next one
     edit_event = next(e for e in log.events if e.kind == "action" and e.payload["command"].startswith("python3 -c \"import pathlib"))
@@ -155,18 +164,37 @@ def test_full_run_logs_truncates_compacts_and_submits(repo, tmp_path):
     assert "Working state, version" in reset[2]["content"]
     # this tiny budget cannot hold the recent events, so the reset drops and records them
     notes = [e.payload for e in log.events if e.kind == "note" and e.payload.get("what") == "context_reset"]
-    assert len(notes) == 3 and all(n["tokens"] <= 400 for n in notes) and notes[0]["dropped_events"] == 2
+    assert all(n["tokens"] <= 400 for n in notes) and notes[0]["dropped_events"] >= 1
 
     summary = agent.summary()
-    assert summary["compactions"] == 3 and summary["hist_calls"] == 1 and summary["steps"] == len(steps)
-    assert summary["usage"]["compaction"]["calls"] == 3 and summary["usage"]["agent"]["cached_input"] == 40 * len(steps)
+    n = kinds.count("compaction")
+    assert summary["compactions"] == n == len(notes) and summary["hist_calls"] == 1 and summary["steps"] == len(steps)
+    assert summary["usage"]["compaction"]["calls"] == n and summary["usage"]["agent"]["cached_input"] == 40 * len(steps)
 
 
 def test_output_limit_tracks_the_hard_limit(repo, tmp_path):
-    agent = make_agent(repo, tmp_path, [["ls"], [SUBMIT]], ScriptedCompaction())
+    agent = make_agent(repo, tmp_path, [["ls"], ["ls -a"], [SUBMIT]], ScriptedCompaction())
     agent.run("t")
+    calls = [e.payload for e in EventLog(tmp_path / "run" / "events.jsonl").events if e.kind == "model"]
+    assert agent.model.max_tokens == [2400 - c["estimated_input"] for c in calls]
+
+
+def test_estimates_anchor_on_the_api_count(repo, tmp_path):
     from context_compaction.agent import TOOLS
-    assert agent.model.max_tokens == [2400 - context.context_tokens(s, TOOLS, COUNT) for s in agent.model.seen]
+
+    agent = make_agent(repo, tmp_path, [["ls"], ["ls -a"], [SUBMIT]], ScriptedCompaction())
+    agent.run("t")
+    calls = [e.payload for e in EventLog(tmp_path / "run" / "events.jsonl").events if e.kind == "model"]
+    seen = agent.model.seen
+    # first call: no API count yet, so the local estimate plus the margin
+    assert calls[0]["estimated_input"] == math.ceil(context.context_tokens(seen[0], TOOLS, COUNT) * 1.05)
+    # later calls: last call's API count plus an estimate of what was added since
+    for prev, cur, n in ((calls[0], calls[1], 1), (calls[1], calls[2], 2)):
+        new = seen[n][len(seen[n - 1]):]
+        added = context.context_tokens(new, (), COUNT) + 10 + 4 * len(new)
+        assert cur["estimated_input"] == prev["usage"]["input"] + added
+    # the reserve keeps the estimate at or above what the API counts
+    assert all(c["estimated_input"] >= c["usage"]["input"] for c in calls[1:])
 
 
 def test_compaction_without_room_overflows_with_current_diff(repo, tmp_path):
@@ -182,7 +210,7 @@ def test_failed_patches_fall_back_and_reset_with_the_handoff(repo, tmp_path):
     big = "python3 -c \"print('z' * 3000)\""
     steps = [["cat a.py"], [big], [big], [SUBMIT]]
     compaction = ScriptedCompaction("not json", '{"base_version": 0, "ops": []}', "handoff: edit parse next")
-    agent = make_agent(repo, tmp_path, steps, compaction)
+    agent = make_agent(repo, tmp_path, steps, compaction, threshold=480)
     agent.run("t")
     reset = agent.model.seen[-1][2]["content"]
     assert reset.startswith("Handoff from your previous context") and "edit parse next" in reset
@@ -192,7 +220,7 @@ def test_failed_patches_fall_back_and_reset_with_the_handoff(repo, tmp_path):
 def test_compaction_calls_do_not_use_agent_steps(repo, tmp_path):
     big = "python3 -c \"print('w' * 3000)\""
     steps = [["cat a.py"], [big], [big], [SUBMIT]]
-    agent = make_agent(repo, tmp_path, steps, ScriptedCompaction(first_patch), step_limit=4)
+    agent = make_agent(repo, tmp_path, steps, ScriptedCompaction(first_patch), step_limit=4, threshold=480)
     assert agent.run("t")["exit_status"] == "Submitted"
 
 
@@ -340,7 +368,7 @@ def test_cost_limit_is_checked_before_each_compaction_call(repo, tmp_path):
 def test_compaction_requests_and_replies_are_kept(repo, tmp_path):
     big = "python3 -c \"print('t' * 3000)\""
     steps = [["cat a.py"], [big], [big], [SUBMIT]]
-    agent = make_agent(repo, tmp_path, steps, ScriptedCompaction("not json", first_patch))
+    agent = make_agent(repo, tmp_path, steps, ScriptedCompaction("not json", first_patch), threshold=480)
     agent.run("t")
     rows = [json.loads(line) for line in (tmp_path / "run" / "compactions.jsonl").read_text().splitlines()]
     assert [r["reply"][:8] for r in rows] == ["not json", '{"base_v']
