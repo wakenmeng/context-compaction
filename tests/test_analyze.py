@@ -36,3 +36,17 @@ def test_windows_cap_at_ten_and_count_each_action_once():
 
 def test_no_compaction_means_no_exposure():
     assert A.repeats([ev(0, "snapshot"), ev(1, "action", command="ls")]) is None
+
+
+def row(iid, resolved, exit_status="Submitted", cost=1.0):
+    return {"instance_id": iid, "repo": iid.split("__")[0], "resolved": resolved, "exit_status": exit_status,
+            "cost": cost, "compaction_cost": 0.0, "steps": 10}
+
+
+def test_escalation_swaps_in_overflowed_tasks_and_adds_both_costs():
+    first = [row("a__1", True), row("a__2", False, "ContextOverflow", 0.5), row("a__3", True, "ContextOverflow", 0.4)]
+    retry = [row("a__2", True, cost=0.7), row("a__3", False, cost=0.6), row("a__9", True)]
+    combined = {r["instance_id"]: r for r in A.escalate(first, retry)}
+    assert [combined[i]["resolved"] for i in ("a__1", "a__2", "a__3")] == [True, True, False]
+    assert combined["a__2"]["cost"] == 1.2 and combined["a__3"]["cost"] == 1.0
+    assert "a__9" not in combined, "only tasks that overflowed are rerun"

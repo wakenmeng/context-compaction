@@ -1,0 +1,80 @@
+{
+  "escalate": "results/c24k-overflow",
+  "results": "results/c-formal",
+  "summary": {
+    "by_repo": {
+      "astropy": "4/5",
+      "django": "40/46",
+      "matplotlib": "5/7",
+      "psf": "2/2",
+      "pydata": "4/4",
+      "pylint-dev": "0/2",
+      "pytest-dev": "4/4",
+      "scikit-learn": "6/6",
+      "sphinx-doc": "8/9",
+      "sympy": "12/15"
+    },
+    "compaction_cost": 5.5780934,
+    "compactions": {
+      "fallback": 1,
+      "patch": 117
+    },
+    "cost_mean": 0.304504014,
+    "cost_median": 0.21771450000000003,
+    "cost_total": 30.4504014,
+    "empty_patches": 0,
+    "escalated": [
+      "django__django-14631",
+      "matplotlib__matplotlib-26208",
+      "pydata__xarray-4687",
+      "sphinx-doc__sphinx-7440",
+      "sphinx-doc__sphinx-7454",
+      "sphinx-doc__sphinx-9229",
+      "sphinx-doc__sphinx-9461",
+      "sympy__sympy-13091"
+    ],
+    "exit_status": {
+      "Submitted": 100
+    },
+    "hist_calls": 10,
+    "max_underestimate": 240,
+    "overflow_resolved_anyway": 0,
+    "patches_first_try": 103,
+    "peak_tokens": 22576,
+    "repeat_counts": [
+      3,
+      847,
+      72
+    ],
+    "repeat_rate": 0.0035419126328217238,
+    "resolved": 85,
+    "resolved_ci95": [
+      0.7671626666784216,
+      0.906940968088377
+    ],
+    "resolved_rate": 0.85,
+    "revived": 64,
+    "stale_marked": 233,
+    "steps_mean": 16.4,
+    "tasks": 100,
+    "tasks_with_compaction": 72,
+    "tight_truncations": 3,
+    "unresolved": [
+      "astropy__astropy-14365",
+      "django__django-10999",
+      "django__django-13513",
+      "django__django-13794",
+      "django__django-14034",
+      "django__django-14534",
+      "django__django-16560",
+      "matplotlib__matplotlib-25479",
+      "matplotlib__matplotlib-26466",
+      "pylint-dev__pylint-4661",
+      "pylint-dev__pylint-6386",
+      "sphinx-doc__sphinx-9229",
+      "sympy__sympy-13091",
+      "sympy__sympy-16597",
+      "sympy__sympy-21930"
+    ]
+  }
+}

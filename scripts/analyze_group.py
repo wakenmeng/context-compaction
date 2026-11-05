@@ -171,17 +171,42 @@ def load(results_dir):
     return [task_row(p.parent) for p in sorted(Path(results_dir).glob("*/run.json"))]
 
 
+def escalate(rows, retry_rows):
+    """One policy: run at the first budget, and rerun at the larger one only the tasks
+    that overflowed. The rule looks at the overflow, never at the test result; both
+    runs' costs count, since the first one was paid before it overflowed"""
+    retry = {r["instance_id"]: r for r in retry_rows}
+    out = []
+    for r in rows:
+        if r["exit_status"] == "ContextOverflow" and r["instance_id"] in retry:
+            second = dict(retry[r["instance_id"]])
+            second["cost"] = r["cost"] + second["cost"]
+            second["compaction_cost"] = r["compaction_cost"] + second["compaction_cost"]
+            second["steps"] = r["steps"] + second["steps"]
+            second["escalated"] = True
+            out.append(second)
+        else:
+            out.append(r)
+    return out
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("results", help="a results directory, e.g. results/c-formal")
     parser.add_argument("--compare", help="a second results directory to compare task by task")
     parser.add_argument("--json", help="write the summary here")
     parser.add_argument("--overflow-causes", action="store_true", help="replay why overflowed tasks' last patch was rejected")
+    parser.add_argument("--escalate", help="results of rerunning the overflowed tasks at a larger budget; "
+                                           "reports the combined policy over all tasks")
     args = parser.parse_args(argv)
 
     rows = load(args.results)
+    if args.escalate:
+        rows = escalate(rows, load(args.escalate))
     summary = summarize(rows)
-    out = {"results": args.results, "summary": summary}
+    if args.escalate:
+        summary["escalated"] = sorted(r["instance_id"] for r in rows if r.get("escalated"))
+    out = {"results": args.results, "escalate": args.escalate, "summary": summary}
     if args.compare:
         other = {r["instance_id"]: r for r in load(args.compare)}
         out["comparison"] = [

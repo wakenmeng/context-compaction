@@ -18,9 +18,26 @@ Every number here is recomputed from `results/` by `scripts/analyze_group.py`; t
 
 ## Headline
 
-**C resolved 82 of the 100 formal tasks (95% Wilson interval 73.3%–88.3%) for $26.54 in API cost, $0.27 per task.**
+| Group | Resolved | 95% Wilson interval | Cost | Per task |
+| --- | --- | --- | --- | --- |
+| C at 16K/12K, pre-registered | 82/100 | 73.3%–88.3% | $26.54 | $0.27 |
+| C at 16K/12K, 24K/18K for tasks that overflowed | 85/100 | 76.7%–90.7% | $30.45 | $0.30 |
 
-For reference only, the paper reports 84.6% for its text-handoff compaction (EoCC) at 16K/12K with the same model on all 500 Verified tasks. That figure is inside our interval, but the sample, prompts and harness differ and there is no paired baseline here, so no claim is made that C is better or worse.
+The second row treats "16K, and 24K when a compaction does not fit" as one policy: the 92 tasks that finished at 16K keep their result, the 8 that overflowed take their 24K rerun, and both runs' costs count. Which tasks move depends only on the overflow, never on a test result. The combination was defined after the 16K result was in, so it is reported next to the pre-registered row, not instead of it.
+
+### Compared with the paper
+
+Same model and list prices; the paper used all 500 Verified tasks with its own prompts and harness.
+
+| Setup | Resolved | Per task |
+| --- | --- | --- |
+| This project, compaction at 16K with 24K fallback | 85% (100 tasks) | $0.30 |
+| This project, compaction at 16K only | 82% (100 tasks) | $0.27 |
+| Paper, no compaction (full history) | 84.4% | $0.34 |
+| Paper, text-handoff compaction (EoCC) at 16K/12K | 84.6% | $0.41 |
+| Paper, text-handoff compaction (EoCC) at 48K/36K | 88.8% | $0.37 |
+
+**Conclusion.** With the context limited to 16K, structured compaction with a 24K fallback matched the paper's full-history accuracy at lower cost per task, and did not make the agent repeat work. This is an outside comparison: the interval is about ±7 points and the samples differ, so it shows parity, not an advantage. Running the full-history agent on these same 100 tasks would make it a paired result.
 
 ## How compaction behaved
 

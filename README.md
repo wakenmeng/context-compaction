@@ -4,7 +4,25 @@ English | [中文](README.zh-CN.md)
 
 **Can a coding agent work in a 16K context without forgetting what it learned?** This project tests a structured, verifiable alternative to the text handoffs that current agents use when they compact their context.
 
-**Result:** group C resolved **82 of 100** SWE-bench Verified tasks under a 16K context limit (95% interval 73–88%), for $0.27 per task, with every call under 16K and almost no repeated work after compaction (0.34% of actions). Rerun at 24K, the eight tasks that hit the limit all finished without overflow and six resolved. Full analysis: [docs/results.md](docs/results.md).
+## Conclusion: with a limited context window, is compaction good?
+
+**Yes, on this evidence.** Working in a 16K window and compacting into a structured state, with a 24K fallback when a compaction does not fit, the agent solved as many tasks as the paper's agent that keeps the full history, at lower cost per task.
+
+| Setup | Context the model sees | Resolved | Cost per task | Source |
+| --- | --- | --- | --- | --- |
+| **This project: compaction, 16K with 24K fallback** | 16K; 24K only for the 8 tasks that overflowed | **85/100** (95% CI 77–91%) | **$0.30** | 100 tasks |
+| This project: compaction, 16K only | 16K | 82/100 (95% CI 73–88%) | $0.27 | 100 tasks |
+| Paper: no compaction (full history) | Full history | 84.4% | $0.34 | 500 tasks |
+| Paper: text-handoff compaction (EoCC) | 16K | 84.6% | $0.41 | 500 tasks |
+
+Same model (GPT 5.6 Sol) and the same list prices ($4 / $0.40 / $20 per million new input / cached input / output tokens) throughout. In the 16K/24K row, a task moves to 24K only if it overflowed at 16K, never because of its test result, and both runs' costs count.
+
+- **Accuracy holds.** 85% against 84.4% with the full history, while the model never sees more than 16K on 92 of the 100 tasks.
+- **It costs less.** $0.30 per task against $0.34 for the full history and $0.41 for the paper's text handoff at 16K, because the state is patched field by field instead of rewritten, and contexts restart short.
+- **It does not make the agent repeat itself.** 0.35% of actions after a compaction repeated earlier work.
+- **16K alone is tight.** 8% of tasks overflowed when a rejected patch had no room for its retry; with a 24K fallback none did.
+
+**What this does not show.** The paper's numbers come from all 500 tasks with its own prompts and harness, so this is an outside comparison, not a paired one; with a ±7-point interval, a difference of a few points cannot be seen. The 16K/24K row combines runs after the formal 16K result was in. A no-compaction baseline on these same 100 tasks would turn this into a paired result. Full analysis: [docs/results.md](docs/results.md).
 
 ## Why
 
