@@ -34,10 +34,12 @@ Same model and list prices; the paper used all 500 Verified tasks with its own p
 | This project, compaction at 16K with 24K fallback | 85% (100 tasks) | $0.30 |
 | This project, compaction at 16K only | 82% (100 tasks) | $0.27 |
 | Paper, no compaction (full history) | 84.4% | $0.34 |
-| Paper, text-handoff compaction (EoCC) at 16K/12K | 84.6% | $0.41 |
 | Paper, text-handoff compaction (EoCC) at 48K/36K | 88.8% | $0.37 |
+| Paper, text-handoff compaction (EoCC) at 32K/24K | 85.0% | $0.37 |
+| Paper, text-handoff compaction (EoCC) at 24K/18K | 85.0% | $0.38 |
+| Paper, text-handoff compaction (EoCC) at 16K/12K | 84.6% | $0.41 |
 
-**Conclusion.** With the context limited to 16K, structured compaction with a 24K fallback matched the paper's full-history accuracy at lower cost per task, and did not make the agent repeat work. This is an outside comparison: the interval is about ±7 points and the samples differ, so it shows parity, not an advantage. Running the full-history agent on these same 100 tasks would make it a paired result.
+**Conclusion.** In the paper, compaction keeps full-history accuracy from 32K down to 16K (84.6–85.0%) and does better at 48K (88.8%). With the context limited to 16K, structured compaction with a 24K fallback reached the same 85% at the lowest cost per task in the table, and did not make the agent repeat work. This is an outside comparison: the interval is about ±7 points and the samples differ, so it shows parity, not an advantage. Running the full-history agent on these same 100 tasks would make it a paired result.
 
 ## How compaction behaved
 

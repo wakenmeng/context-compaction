@@ -6,23 +6,27 @@ English | [中文](README.zh-CN.md)
 
 ## Conclusion: with a limited context window, is compaction good?
 
-**Yes, on this evidence.** Working in a 16K window and compacting into a structured state, with a 24K fallback when a compaction does not fit, the agent solved as many tasks as the paper's agent that keeps the full history, at lower cost per task.
+**Yes.** With compaction, a 16K to 32K window keeps the accuracy of the full history (84–85%), and a 48K window does better (88.8%). This project's structured compaction, at 16K with a 24K fallback, lands in that band at 85%, for the lowest cost per task in the table.
 
-| Setup | Context the model sees | Resolved | Cost per task | Source |
+| Setup | Context limit / compaction threshold | Resolved | Cost per task | Tasks |
 | --- | --- | --- | --- | --- |
-| **This project: compaction, 16K with 24K fallback** | 16K; 24K only for the 8 tasks that overflowed | **85/100** (95% CI 77–91%) | **$0.30** | 100 tasks |
-| This project: compaction, 16K only | 16K | 82/100 (95% CI 73–88%) | $0.27 | 100 tasks |
-| Paper: no compaction (full history) | Full history | 84.4% | $0.34 | 500 tasks |
-| Paper: text-handoff compaction (EoCC) | 16K | 84.6% | $0.41 | 500 tasks |
+| Paper: no compaction (full history) | none | 84.4% | $0.34 | 500 |
+| Paper: text-handoff compaction (EoCC) | 48K / 36K | 88.8% | $0.37 | 500 |
+| Paper: text-handoff compaction (EoCC) | 32K / 24K | 85.0% | $0.37 | 500 |
+| Paper: text-handoff compaction (EoCC) | 24K / 18K | 85.0% | $0.38 | 500 |
+| Paper: text-handoff compaction (EoCC) | 16K / 12K | 84.6% | $0.41 | 500 |
+| **This project: structured compaction** | **16K / 12K, 24K / 18K for the 8 tasks that overflowed** | **85% (95% CI 77–91%)** | **$0.30** | 100 |
+| This project: structured compaction | 16K / 12K only | 82% (95% CI 73–88%) | $0.27 | 100 |
 
-Same model (GPT 5.6 Sol) and the same list prices ($4 / $0.40 / $20 per million new input / cached input / output tokens) throughout. In the 16K/24K row, a task moves to 24K only if it overflowed at 16K, never because of its test result, and both runs' costs count.
+Same model (GPT 5.6 Sol) and the same list prices ($4 / $0.40 / $20 per million new input / cached input / output tokens) throughout; the paper's costs are recomputed from its token counts. In the 16K/24K row, a task moves to 24K only if it overflowed at 16K, never because of its test result, and both runs' costs count.
 
-- **Accuracy holds.** 85% against 84.4% with the full history, while the model never sees more than 16K on 92 of the 100 tasks.
-- **It costs less.** $0.30 per task against $0.34 for the full history and $0.41 for the paper's text handoff at 16K, because the state is patched field by field instead of rewritten, and contexts restart short.
+- **A small window costs little accuracy.** In the paper, shrinking the window from 32K to 16K moves accuracy from 85.0% to 84.6%, all at the full-history level; only 48K is clearly better.
+- **Structured compaction matches that at 16K.** 85%, while the model never sees more than 16K on 92 of the 100 tasks.
+- **It is the cheapest setup in the table.** $0.30 per task, against $0.34 for the full history and $0.37–0.41 for the paper's compaction, because the state is patched field by field instead of rewritten, and contexts restart short. In the paper, compaction costs more than the full history at every window, most at 16K.
 - **It does not make the agent repeat itself.** 0.35% of actions after a compaction repeated earlier work.
-- **16K alone is tight.** 8% of tasks overflowed when a rejected patch had no room for its retry; with a 24K fallback none did.
+- **16K alone is tight for it.** 8% of tasks overflowed when a rejected patch had no room for its retry; with a 24K fallback none did.
 
-**What this does not show.** The paper's numbers come from all 500 tasks with its own prompts and harness, so this is an outside comparison, not a paired one; with a ±7-point interval, a difference of a few points cannot be seen. The 16K/24K row combines runs after the formal 16K result was in. A no-compaction baseline on these same 100 tasks would turn this into a paired result. Full analysis: [docs/results.md](docs/results.md).
+**What this does not show.** The paper's numbers come from all 500 tasks with its own prompts and harness, so this is an outside comparison, not a paired one; with a ±7-point interval, the gap to 48K (88.8%) is not resolved either way, and this project did not run 48K. The 16K/24K row combines runs after the formal 16K result was in. Running the full-history agent, or 48K, on these same 100 tasks would make the comparison paired. Full analysis: [docs/results.md](docs/results.md).
 
 ## Why
 
