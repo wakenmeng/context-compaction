@@ -1,0 +1,38 @@
+{
+  "attempt": 1,
+  "code_commit": "12a7e8db2c290851e7ffcdec0d27b198e00193a1",
+  "config_sha256": "3521e64c682ab2f817bf5047fe53c9237c0e4e973316d7752055bc801af02508",
+  "exit_status": "Submitted",
+  "finished": 1793867739.75542,
+  "group": "c",
+  "instance_id": "matplotlib__matplotlib-22865",
+  "model": "openai/gpt-5.6-sol",
+  "started": 1793867542.0303187,
+  "summary": {
+    "compactions": 2,
+    "cost": 0.416552,
+    "fallbacks": 0,
+    "hist_calls": 0,
+    "overflow": false,
+    "rebuilds": 0,
+    "steps": 20,
+    "usage": {
+      "agent": {
+        "cached_input": 117275,
+        "calls": 20,
+        "cost": 0.33776,
+        "input": 145653,
+        "output": 7451,
+        "reasoning": 2446
+      },
+      "compaction": {
+        "cached_input": 22030,
+        "calls": 2,
+        "cost": 0.078792,
+        "input": 26652,
+        "output": 2351,
+        "reasoning": 420
+      }
+    }
+  }
+}

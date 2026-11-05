@@ -1,0 +1,22 @@
+diff --git a/sphinx/ext/autodoc/importer.py b/sphinx/ext/autodoc/importer.py
+index 1a8ea0973..df5fe1ba0 100644
+--- a/sphinx/ext/autodoc/importer.py
++++ b/sphinx/ext/autodoc/importer.py
+@@ -275,6 +275,17 @@ def get_class_members(subject: Any, objpath: List[str], attrgetter: Callable
+     for name in dir(subject):
+         try:
+             value = attrgetter(subject, name)
++
++            # classmethod can wrap other descriptors since Python 3.9.  Accessing a
++            # classmethod-wrapped property evaluates the property and loses the
++            # descriptor (and its docstring), so retrieve it from the class dict.
++            for cls in getmro(subject):
++                descriptor = safe_getattr(cls, '__dict__', {}).get(name)
++                if (isinstance(descriptor, classmethod) and
++                        isinstance(descriptor.__func__, property)):
++                    value = descriptor.__func__
++                    break
++
+             if ismock(value):
+                 value = undecorate(value)
+ 

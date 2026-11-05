@@ -4,6 +4,8 @@
 
 **编程 agent 能不能在 16K 上下文里工作，同时不忘掉已经弄清楚的事？** 这个项目要验证一种结构化、可校验的做法，替代现在 agent 压缩上下文时写的文本交接
 
+**结果：** 在 16K 上下文上限下，C 组解决了 SWE-bench Verified **100 题中的 82 题**（95% 区间 73–88%），平均每题 $0.27，所有调用都在 16K 以内，压缩后几乎没有重复工作（0.34% 的动作）。撞到上限的 8 道题在 24K 下全部跑完、没有溢出，其中 6 道解决。完整分析见 [docs/results.zh-CN.md](docs/results.zh-CN.md)
+
 ## 为什么做
 
 论文 [You don't need long context](https://arxiv.org/pdf/2611.05306)（arXiv 2611.05306）表明：前沿模型只要频繁压缩、保持短上下文，在 SWE-bench Verified 上的准确率就能接近全历史基线。它的压缩方式是每次把整段历史重写成一份新的文本交接，论文自己也承认留下了三个空白：
@@ -42,10 +44,10 @@
 | M2 | 上下文组装、token 预算、`hist`、脚本化 trace 的端到端测试 | C 已完成 |
 | M3 | 接入 mini-swe-agent，1 题端到端 | C 已完成：两道冒烟题试跑，压缩路径已在真实运行中验证 |
 | M4 | 20 题冒烟，调参后冻结配置 | 已完成：两轮都是 16/20；冻结在 `configs/frozen_c.json` |
-| M5 | C 跑 100 题，官方评测 | |
-| M6 | 统计分析和报告 | |
+| M5 | C 跑 100 题，官方评测 | 已完成：82/100 |
+| M6 | 统计分析和报告 | 已完成：[docs/results.zh-CN.md](docs/results.zh-CN.md)；8 道溢出题的 24K 补跑 |
 
-目前只跑过 20 道冒烟题，它们只用于调参，不作为结果报告。第一轮解决 16/20，费用 $4.37；有 1 道题溢出，据此加入了方案里记录的自适应截断。第二轮用的是现在冻结的代码，同样解决 16/20，费用 $4.47，没有溢出，19 次压缩全部一次通过，所有调用都在 16K 以内（最高 15,149）。正式运行前会核对配置和 `src/` 下的代码是否与冻结记录一致，不一致就拒绝运行。还没有正式结果
+正式运行用的是两轮冒烟（都是 16/20）之后冻结的配置。有 8 道正式题溢出，原因是 patch 被拒后的重试放不进 16K；同样 8 道题在 24K/18K 下没有溢出，其中 6 道解决。正式结果按冻结时的样子保留；修复这个缺陷、以及在全部 100 题上做 16K 与 24K 的对比，是 [docs/results.zh-CN.md](docs/results.zh-CN.md) 里的下一步
 
 ## 工程说明
 
@@ -59,7 +61,8 @@
 
 | 路径 | 内容 |
 | --- | --- |
-| `docs/plan.md` | 预登记方案：假设、指标、统计方法、里程碑 |
+| `docs/plan.md` | 预登记方案：假设、指标、统计方法、里程碑、修订记录 |
+| `docs/results.zh-CN.md` | 结果与分析 |
 | `src/context_compaction/event_log.py` | 只追加的事件日志，记录每个动作改了哪些文件 |
 | `src/context_compaction/state.py` | 状态 schema 和带版本的存储 |
 | `src/context_compaction/patch.py` | patch 校验、失效、回退后的重建 |
@@ -67,9 +70,10 @@
 | `src/context_compaction/agent.py` | 接入 mini-swe-agent：token 预算、压缩与重置、`hist`、逐动作记录 |
 | `src/context_compaction/context.py`、`hist.py`、`repo_files.py` | 上下文组装、历史检索工具、容器内文件哈希 |
 | `src/context_compaction/pins.py` | 固定的版本和数据快照 |
-| `scripts/` | 抽样、数据下载、环境检查、gold 评测、云主机 |
+| `scripts/` | 抽样、数据下载、环境检查、gold 评测、云主机、分组运行、评测、分析 |
 | `configs/` | 冻结的题目名单和排除名单 |
 | `results/gold/` | gold 评测汇总 |
+| `results/summary/`、`results/c-formal/`、`results/c24k-overflow/` | 报告所用运行的分析汇总和每题记录（运行、用量、评测、patch） |
 | `tests/` | 单元测试 |
 
 ## 复现

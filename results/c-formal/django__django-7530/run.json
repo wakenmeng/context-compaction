@@ -1,0 +1,38 @@
+{
+  "attempt": 1,
+  "code_commit": "12a7e8db2c290851e7ffcdec0d27b198e00193a1",
+  "config_sha256": "3521e64c682ab2f817bf5047fe53c9237c0e4e973316d7752055bc801af02508",
+  "exit_status": "Submitted",
+  "finished": 1793867612.3878243,
+  "group": "c",
+  "instance_id": "django__django-7530",
+  "model": "openai/gpt-5.6-sol",
+  "started": 1793867525.1053689,
+  "summary": {
+    "compactions": 1,
+    "cost": 0.2034078,
+    "fallbacks": 0,
+    "hist_calls": 0,
+    "overflow": false,
+    "rebuilds": 0,
+    "steps": 11,
+    "usage": {
+      "agent": {
+        "cached_input": 47858,
+        "calls": 11,
+        "cost": 0.14089020000000002,
+        "input": 61778,
+        "output": 2609,
+        "reasoning": 508
+      },
+      "compaction": {
+        "cached_input": 24194,
+        "calls": 2,
+        "cost": 0.0625176,
+        "input": 27108,
+        "output": 1921,
+        "reasoning": 31
+      }
+    }
+  }
+}

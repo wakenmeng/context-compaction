@@ -4,6 +4,8 @@ English | [中文](README.zh-CN.md)
 
 **Can a coding agent work in a 16K context without forgetting what it learned?** This project tests a structured, verifiable alternative to the text handoffs that current agents use when they compact their context.
 
+**Result:** group C resolved **82 of 100** SWE-bench Verified tasks under a 16K context limit (95% interval 73–88%), for $0.27 per task, with every call under 16K and almost no repeated work after compaction (0.34% of actions). Rerun at 24K, the eight tasks that hit the limit all finished without overflow and six resolved. Full analysis: [docs/results.md](docs/results.md).
+
 ## Why
 
 [You don't need long context](https://arxiv.org/pdf/2611.05306) (arXiv 2611.05306) shows that frontier models stay close to their full-history accuracy on SWE-bench Verified when they compact often and keep contexts short. Their compaction rewrites the whole history into a fresh text handoff each time, which leaves three gaps the paper itself points to:
@@ -42,10 +44,10 @@ The plan, metrics and every amendment are pre-registered in [docs/plan.md](docs/
 | M2 | Context assembly, token budget, `hist`, end-to-end tests on scripted traces | Done for C |
 | M3 | mini-swe-agent integration, one task end to end | C done: two smoke trials, compaction verified on real runs |
 | M4 | 20-task smoke run, tuning, then freeze the config | Done: 16/20 on both passes; frozen in `configs/frozen_c.json` |
-| M5 | 100-task run for C, official evaluation | |
-| M6 | Statistics and report | |
+| M5 | 100-task run for C, official evaluation | Done: 82/100 |
+| M6 | Statistics and report | Done: [docs/results.md](docs/results.md); 24K rerun of the 8 overflows |
 
-So far only the 20 smoke tasks have run, which are for tuning and are never reported as results. The first pass resolved 16 of 20 for $4.37; one task overflowed, which led to the adaptive output cut described in the plan. The second pass, on the code now frozen, also resolved 16 of 20 for $4.47, with no overflow, 19 compactions all accepted on the first try, and every call under 16K (peak 15,149). The formal run refuses to start unless the config and the code under `src/` match the frozen record. There are no formal results yet.
+The formal run used the configuration frozen after two smoke passes (16/20 each). Eight formal tasks overflowed because a retry after a rejected patch no longer fit under 16K; at 24K/18K the same eight had no overflow and six resolved. The result stays as frozen; the flaw and a 16K vs 24K comparison on all 100 tasks are the next steps in [docs/results.md](docs/results.md).
 
 ## Engineering notes
 
@@ -59,7 +61,8 @@ So far only the 20 smoke tasks have run, which are for tuning and are never repo
 
 | Path | Content |
 | --- | --- |
-| `docs/plan.md` | Pre-registered plan: hypotheses, metrics, statistics, milestones |
+| `docs/plan.md` | Pre-registered plan: hypotheses, metrics, statistics, milestones, amendments |
+| `docs/results.md` | Results and analysis |
 | `src/context_compaction/event_log.py` | Append-only event log with per-action file changes |
 | `src/context_compaction/state.py` | State schema and versioned store |
 | `src/context_compaction/patch.py` | Patch validation, invalidation, rebuild after a fallback |
@@ -67,9 +70,10 @@ So far only the 20 smoke tasks have run, which are for tuning and are never repo
 | `src/context_compaction/agent.py` | mini-swe-agent integration: token budget, compaction and reset, `hist`, per-action logging |
 | `src/context_compaction/context.py`, `hist.py`, `repo_files.py` | Context assembly, history tool, in-container file hashing |
 | `src/context_compaction/pins.py` | Pinned versions and dataset snapshot |
-| `scripts/` | Sampling, dataset download, environment check, gold evaluation, cloud VM |
+| `scripts/` | Sampling, dataset download, environment check, gold evaluation, cloud VM, group runs, evaluation, analysis |
 | `configs/` | Frozen task list and excluded tasks |
 | `results/gold/` | Gold evaluation summaries |
+| `results/summary/`, `results/c-formal/`, `results/c24k-overflow/` | Analysis summaries and per-task records (run, usage, evaluation, patch) of the reported runs |
 | `tests/` | Unit tests |
 
 ## Reproduce

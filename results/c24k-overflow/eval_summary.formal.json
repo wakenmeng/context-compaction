@@ -1,0 +1,16 @@
+{
+  "empty_patch": 0,
+  "evaluated": 8,
+  "harness_errors": 0,
+  "resolved": 6,
+  "resolved_ids": [
+    "django__django-14631",
+    "matplotlib__matplotlib-26208",
+    "pydata__xarray-4687",
+    "sphinx-doc__sphinx-7440",
+    "sphinx-doc__sphinx-7454",
+    "sphinx-doc__sphinx-9461"
+  ],
+  "run_id": "group-c-formal-ea37539331d9",
+  "set": "formal"
+}

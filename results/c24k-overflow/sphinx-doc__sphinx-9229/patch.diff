@@ -1,0 +1,14 @@
+diff --git a/sphinx/ext/autodoc/__init__.py b/sphinx/ext/autodoc/__init__.py
+index 1f4c98284..2febb859d 100644
+--- a/sphinx/ext/autodoc/__init__.py
++++ b/sphinx/ext/autodoc/__init__.py
+@@ -1797,7 +1797,8 @@ class GenericAliasMixin(DataDocumenterMixinBase):
+                 super().should_suppress_directive_header())
+ 
+     def update_content(self, more_content: StringList) -> None:
+-        if inspect.isgenericalias(self.object):
++        if (inspect.isgenericalias(self.object) and
++                not more_content and not self.get_doc()):
+             more_content.append(_('alias of %s') % restify(self.object), '')
+             more_content.append('', '')
+ 

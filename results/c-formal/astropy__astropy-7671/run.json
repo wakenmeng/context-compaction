@@ -1,0 +1,38 @@
+{
+  "attempt": 1,
+  "code_commit": "12a7e8db2c290851e7ffcdec0d27b198e00193a1",
+  "config_sha256": "3521e64c682ab2f817bf5047fe53c9237c0e4e973316d7752055bc801af02508",
+  "exit_status": "Submitted",
+  "finished": 1793867024.042299,
+  "group": "c",
+  "instance_id": "astropy__astropy-7671",
+  "model": "openai/gpt-5.6-sol",
+  "started": 1793866836.9257326,
+  "summary": {
+    "compactions": 1,
+    "cost": 0.38654560000000004,
+    "fallbacks": 0,
+    "hist_calls": 0,
+    "overflow": false,
+    "rebuilds": 0,
+    "steps": 12,
+    "usage": {
+      "agent": {
+        "cached_input": 49236,
+        "calls": 12,
+        "cost": 0.3563664000000001,
+        "input": 63802,
+        "output": 13285,
+        "reasoning": 589
+      },
+      "compaction": {
+        "cached_input": 11073,
+        "calls": 1,
+        "cost": 0.0301792,
+        "input": 12562,
+        "output": 919,
+        "reasoning": 0
+      }
+    }
+  }
+}

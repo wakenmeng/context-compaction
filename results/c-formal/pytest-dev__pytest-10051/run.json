@@ -1,0 +1,31 @@
+{
+  "attempt": 1,
+  "code_commit": "12a7e8db2c290851e7ffcdec0d27b198e00193a1",
+  "config_sha256": "3521e64c682ab2f817bf5047fe53c9237c0e4e973316d7752055bc801af02508",
+  "exit_status": "Submitted",
+  "finished": 1793867839.2192721,
+  "group": "c",
+  "instance_id": "pytest-dev__pytest-10051",
+  "model": "openai/gpt-5.6-sol",
+  "started": 1793867789.102498,
+  "summary": {
+    "compactions": 0,
+    "cost": 0.103881,
+    "fallbacks": 0,
+    "hist_calls": 0,
+    "overflow": false,
+    "rebuilds": 0,
+    "steps": 10,
+    "usage": {
+      "agent": {
+        "cached_input": 46190,
+        "calls": 10,
+        "cost": 0.103881,
+        "input": 53681,
+        "output": 2399,
+        "reasoning": 473
+      },
+      "compaction": {}
+    }
+  }
+}

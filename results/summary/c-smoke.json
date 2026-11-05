@@ -1,0 +1,60 @@
+{
+  "results": "results/c-smoke",
+  "summary": {
+    "by_repo": {
+      "astropy": "1/1",
+      "django": "5/5",
+      "matplotlib": "1/1",
+      "mwaskom": "1/1",
+      "pallets": "1/1",
+      "psf": "0/1",
+      "pydata": "1/2",
+      "pylint-dev": "0/1",
+      "pytest-dev": "1/1",
+      "scikit-learn": "2/2",
+      "sphinx-doc": "1/1",
+      "sympy": "2/3"
+    },
+    "compaction_cost": 0.5663926,
+    "compactions": {
+      "patch": 17
+    },
+    "cost_mean": 0.21863283,
+    "cost_median": 0.19175010000000003,
+    "cost_total": 4.3726566,
+    "empty_patches": 0,
+    "exit_status": {
+      "ContextOverflow": 1,
+      "Submitted": 19
+    },
+    "hist_calls": 0,
+    "max_underestimate": 166,
+    "overflow_resolved_anyway": 1,
+    "patches_first_try": 17,
+    "peak_tokens": 14774,
+    "repeat_counts": [
+      0,
+      119,
+      11
+    ],
+    "repeat_rate": 0.0,
+    "resolved": 16,
+    "resolved_ci95": [
+      0.5839782779742401,
+      0.9193436467288
+    ],
+    "resolved_rate": 0.8,
+    "revived": 12,
+    "stale_marked": 27,
+    "steps_mean": 13.05,
+    "tasks": 20,
+    "tasks_with_compaction": 11,
+    "tight_truncations": 0,
+    "unresolved": [
+      "psf__requests-1724",
+      "pydata__xarray-3993",
+      "pylint-dev__pylint-4604",
+      "sympy__sympy-17630"
+    ]
+  }
+}

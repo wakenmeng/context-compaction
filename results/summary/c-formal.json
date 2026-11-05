@@ -1,0 +1,83 @@
+{
+  "overflow_causes": {
+    "django__django-14631": "fact f3: reviving a stale entry needs a source action after e40",
+    "matplotlib__matplotlib-26208": "done_when must not be empty",
+    "pydata__xarray-4687": "fact f1: reviving a stale entry needs a source action after e48",
+    "sphinx-doc__sphinx-7440": "over the state cap: state is 3381 tokens, cap is 3000",
+    "sphinx-doc__sphinx-7454": "fact f4: reviving a stale entry needs a source action after e33",
+    "sphinx-doc__sphinx-9229": "invalid JSON: Expecting ',' delimiter: line 133 column 6 (char 4937)",
+    "sphinx-doc__sphinx-9461": "fact f1: reviving a stale entry needs a source action after e57",
+    "sympy__sympy-13091": "fact f1: reviving a stale entry needs a source action after e42"
+  },
+  "results": "results/c-formal",
+  "summary": {
+    "by_repo": {
+      "astropy": "4/5",
+      "django": "40/46",
+      "matplotlib": "4/7",
+      "psf": "2/2",
+      "pydata": "3/4",
+      "pylint-dev": "0/2",
+      "pytest-dev": "4/4",
+      "scikit-learn": "6/6",
+      "sphinx-doc": "6/9",
+      "sympy": "13/15"
+    },
+    "compaction_cost": 5.0055848,
+    "compactions": {
+      "fallback": 1,
+      "patch": 122
+    },
+    "cost_mean": 0.265405842,
+    "cost_median": 0.21675860000000002,
+    "cost_total": 26.5405842,
+    "empty_patches": 2,
+    "exit_status": {
+      "ContextOverflow": 8,
+      "Submitted": 92
+    },
+    "hist_calls": 10,
+    "max_underestimate": 240,
+    "overflow_resolved_anyway": 3,
+    "patches_first_try": 107,
+    "peak_tokens": 15414,
+    "repeat_counts": [
+      3,
+      877,
+      72
+    ],
+    "repeat_rate": 0.0034207525655644243,
+    "resolved": 82,
+    "resolved_ci95": [
+      0.7333246397578691,
+      0.8829986834574896
+    ],
+    "resolved_rate": 0.82,
+    "revived": 61,
+    "stale_marked": 218,
+    "steps_mean": 14.52,
+    "tasks": 100,
+    "tasks_with_compaction": 72,
+    "tight_truncations": 9,
+    "unresolved": [
+      "astropy__astropy-14365",
+      "django__django-10999",
+      "django__django-13513",
+      "django__django-13794",
+      "django__django-14034",
+      "django__django-14534",
+      "django__django-16560",
+      "matplotlib__matplotlib-25479",
+      "matplotlib__matplotlib-26208",
+      "matplotlib__matplotlib-26466",
+      "pydata__xarray-4687",
+      "pylint-dev__pylint-4661",
+      "pylint-dev__pylint-6386",
+      "sphinx-doc__sphinx-7440",
+      "sphinx-doc__sphinx-9229",
+      "sphinx-doc__sphinx-9461",
+      "sympy__sympy-16597",
+      "sympy__sympy-21930"
+    ]
+  }
+}

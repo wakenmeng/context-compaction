@@ -10,6 +10,31 @@ results/*
 !results/gold/
 results/gold/*
 !results/gold/*.json
+# analysis summaries and small per-task records of the reported runs;
+# trajectories, event logs and harness logs stay out (over 100 MB)
+!results/summary/
+!results/c-formal/
+results/c-formal/*
+!results/c-formal/config.json
+!results/c-formal/eval_summary.formal.json
+!results/c-formal/*/
+results/c-formal/*/*
+!results/c-formal/*/run.json
+!results/c-formal/*/usage.json
+!results/c-formal/*/eval.json
+!results/c-formal/*/patch.diff
+results/c-formal/attempts/
+!results/c24k-overflow/
+results/c24k-overflow/*
+!results/c24k-overflow/config.json
+!results/c24k-overflow/eval_summary.formal.json
+!results/c24k-overflow/*/
+results/c24k-overflow/*/*
+!results/c24k-overflow/*/run.json
+!results/c24k-overflow/*/usage.json
+!results/c24k-overflow/*/eval.json
+!results/c24k-overflow/*/patch.diff
+results/c24k-overflow/attempts/
 data/
 logs/
 .DS_Store

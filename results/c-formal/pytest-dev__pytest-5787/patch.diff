@@ -1,0 +1,172 @@
+diff --git a/src/_pytest/reports.py b/src/_pytest/reports.py
+index 4682d5b6e..86f88f1af 100644
+--- a/src/_pytest/reports.py
++++ b/src/_pytest/reports.py
+@@ -4,6 +4,7 @@ from typing import Optional
+ import py
+ 
+ from _pytest._code.code import ExceptionInfo
++from _pytest._code.code import ExceptionChainRepr
+ from _pytest._code.code import ReprEntry
+ from _pytest._code.code import ReprEntryNative
+ from _pytest._code.code import ReprExceptionInfo
+@@ -161,9 +162,8 @@ class BaseReport:
+         Experimental method.
+         """
+ 
+-        def disassembled_report(rep):
+-            reprtraceback = rep.longrepr.reprtraceback.__dict__.copy()
+-            reprcrash = rep.longrepr.reprcrash.__dict__.copy()
++        def serialize_repr_traceback(reprtraceback):
++            reprtraceback = reprtraceback.__dict__.copy()
+ 
+             new_entries = []
+             for entry in reprtraceback["reprentries"]:
+@@ -177,19 +177,35 @@ class BaseReport:
+                 new_entries.append(entry_data)
+ 
+             reprtraceback["reprentries"] = new_entries
+-
+-            return {
+-                "reprcrash": reprcrash,
+-                "reprtraceback": reprtraceback,
+-                "sections": rep.longrepr.sections,
+-            }
++            return reprtraceback
++
++        def serialize_repr_crash(reprcrash):
++            return reprcrash.__dict__.copy() if reprcrash is not None else None
++
++        def serialize_exception_longrepr(longrepr):
++            result = {"sections": longrepr.sections}
++            if isinstance(longrepr, ExceptionChainRepr) and len(longrepr.chain) > 1:
++                result["chain"] = [
++                    (
++                        serialize_repr_traceback(reprtraceback),
++                        serialize_repr_crash(reprcrash),
++                        description,
++                    )
++                    for reprtraceback, reprcrash, description in longrepr.chain
++                ]
++            else:
++                result["reprtraceback"] = serialize_repr_traceback(
++                    longrepr.reprtraceback
++                )
++                result["reprcrash"] = serialize_repr_crash(longrepr.reprcrash)
++            return result
+ 
+         d = self.__dict__.copy()
+         if hasattr(self.longrepr, "toterminal"):
+             if hasattr(self.longrepr, "reprtraceback") and hasattr(
+                 self.longrepr, "reprcrash"
+             ):
+-                d["longrepr"] = disassembled_report(self)
++                d["longrepr"] = serialize_exception_longrepr(self.longrepr)
+             else:
+                 d["longrepr"] = str(self.longrepr)
+         else:
+@@ -211,51 +227,64 @@ class BaseReport:
+ 
+         Experimental method.
+         """
+-        if reportdict["longrepr"]:
+-            if (
+-                "reprcrash" in reportdict["longrepr"]
+-                and "reprtraceback" in reportdict["longrepr"]
+-            ):
++        def deserialize_repr_traceback(reprtraceback):
++            unserialized_entries = []
++            reprentry = None
++            for entry_data in reprtraceback["reprentries"]:
++                data = entry_data["data"]
++                entry_type = entry_data["type"]
++                if entry_type == "ReprEntry":
++                    reprfuncargs = None
++                    reprfileloc = None
++                    reprlocals = None
++                    if data["reprfuncargs"]:
++                        reprfuncargs = ReprFuncArgs(**data["reprfuncargs"])
++                    if data["reprfileloc"]:
++                        reprfileloc = ReprFileLocation(**data["reprfileloc"])
++                    if data["reprlocals"]:
++                        reprlocals = ReprLocals(data["reprlocals"]["lines"])
++
++                    reprentry = ReprEntry(
++                        lines=data["lines"],
++                        reprfuncargs=reprfuncargs,
++                        reprlocals=reprlocals,
++                        filelocrepr=reprfileloc,
++                        style=data["style"],
++                    )
++                elif entry_type == "ReprEntryNative":
++                    reprentry = ReprEntryNative(data["lines"])
++                else:
++                    _report_unserialization_failure(entry_type, cls, reportdict)
++                unserialized_entries.append(reprentry)
++            reprtraceback["reprentries"] = unserialized_entries
++            return ReprTraceback(**reprtraceback)
+ 
+-                reprtraceback = reportdict["longrepr"]["reprtraceback"]
+-                reprcrash = reportdict["longrepr"]["reprcrash"]
+-
+-                unserialized_entries = []
+-                reprentry = None
+-                for entry_data in reprtraceback["reprentries"]:
+-                    data = entry_data["data"]
+-                    entry_type = entry_data["type"]
+-                    if entry_type == "ReprEntry":
+-                        reprfuncargs = None
+-                        reprfileloc = None
+-                        reprlocals = None
+-                        if data["reprfuncargs"]:
+-                            reprfuncargs = ReprFuncArgs(**data["reprfuncargs"])
+-                        if data["reprfileloc"]:
+-                            reprfileloc = ReprFileLocation(**data["reprfileloc"])
+-                        if data["reprlocals"]:
+-                            reprlocals = ReprLocals(data["reprlocals"]["lines"])
+-
+-                        reprentry = ReprEntry(
+-                            lines=data["lines"],
+-                            reprfuncargs=reprfuncargs,
+-                            reprlocals=reprlocals,
+-                            filelocrepr=reprfileloc,
+-                            style=data["style"],
+-                        )
+-                    elif entry_type == "ReprEntryNative":
+-                        reprentry = ReprEntryNative(data["lines"])
+-                    else:
+-                        _report_unserialization_failure(entry_type, cls, reportdict)
+-                    unserialized_entries.append(reprentry)
+-                reprtraceback["reprentries"] = unserialized_entries
++        def deserialize_repr_crash(reprcrash):
++            return ReprFileLocation(**reprcrash) if reprcrash is not None else None
+ 
++        if reportdict["longrepr"]:
++            longrepr = reportdict["longrepr"]
++            if "chain" in longrepr:
++                chain = []
++                for reprtraceback, reprcrash, description in longrepr["chain"]:
++                    chain.append(
++                        (
++                            deserialize_repr_traceback(reprtraceback),
++                            deserialize_repr_crash(reprcrash),
++                            description,
++                        )
++                    )
++                exception_info = ExceptionChainRepr(chain)
++            elif "reprcrash" in longrepr and "reprtraceback" in longrepr:
+                 exception_info = ReprExceptionInfo(
+-                    reprtraceback=ReprTraceback(**reprtraceback),
+-                    reprcrash=ReprFileLocation(**reprcrash),
++                    reprtraceback=deserialize_repr_traceback(longrepr["reprtraceback"]),
++                    reprcrash=deserialize_repr_crash(longrepr["reprcrash"]),
+                 )
++            else:
++                exception_info = None
+ 
+-                for section in reportdict["longrepr"]["sections"]:
++            if exception_info is not None:
++                for section in longrepr["sections"]:
+                     exception_info.addsection(*section)
+                 reportdict["longrepr"] = exception_info
+ 

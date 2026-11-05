@@ -1,0 +1,48 @@
+{
+  "empty_patch": false,
+  "harness_error": false,
+  "instance_id": "sphinx-doc__sphinx-9229",
+  "report": {
+    "infra_failure": false,
+    "patch_exists": true,
+    "patch_is_None": false,
+    "patch_successfully_applied": true,
+    "resolved": false,
+    "tests_status": {
+      "FAIL_TO_FAIL": {
+        "failure": [],
+        "success": []
+      },
+      "FAIL_TO_PASS": {
+        "failure": [
+          "tests/test_ext_autodoc_autoclass.py::test_class_alias_having_doccomment"
+        ],
+        "success": []
+      },
+      "PASS_TO_FAIL": {
+        "failure": [],
+        "success": []
+      },
+      "PASS_TO_PASS": {
+        "failure": [],
+        "success": [
+          "tests/test_ext_autodoc_autoclass.py::test_classes",
+          "tests/test_ext_autodoc_autoclass.py::test_instance_variable",
+          "tests/test_ext_autodoc_autoclass.py::test_inherited_instance_variable",
+          "tests/test_ext_autodoc_autoclass.py::test_uninitialized_attributes",
+          "tests/test_ext_autodoc_autoclass.py::test_undocumented_uninitialized_attributes",
+          "tests/test_ext_autodoc_autoclass.py::test_decorators",
+          "tests/test_ext_autodoc_autoclass.py::test_properties",
+          "tests/test_ext_autodoc_autoclass.py::test_slots_attribute",
+          "tests/test_ext_autodoc_autoclass.py::test_show_inheritance_for_subclass_of_generic_type",
+          "tests/test_ext_autodoc_autoclass.py::test_class_doc_from_class",
+          "tests/test_ext_autodoc_autoclass.py::test_class_doc_from_init",
+          "tests/test_ext_autodoc_autoclass.py::test_class_doc_from_both",
+          "tests/test_ext_autodoc_autoclass.py::test_class_alias"
+        ]
+      }
+    }
+  },
+  "resolved": false,
+  "run_id": "group-c-formal-ea37539331d9"
+}

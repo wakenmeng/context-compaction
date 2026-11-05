@@ -1,0 +1,38 @@
+diff --git a/lib/matplotlib/figure.py b/lib/matplotlib/figure.py
+index dab2bc4a5a..424cf1e0a8 100644
+--- a/lib/matplotlib/figure.py
++++ b/lib/matplotlib/figure.py
+@@ -2276,10 +2276,29 @@ class SubFigure(FigureBase):
+         gs = self._subplotspec.get_gridspec()
+         wr = np.asarray(gs.get_width_ratios())
+         hr = np.asarray(gs.get_height_ratios())
+-        dx = wr[self._subplotspec.colspan].sum() / wr.sum()
+-        dy = hr[self._subplotspec.rowspan].sum() / hr.sum()
+-        x0 = wr[:self._subplotspec.colspan.start].sum() / wr.sum()
+-        y0 = 1 - hr[:self._subplotspec.rowspan.stop].sum() / hr.sum()
++        nrows, ncols = gs.get_geometry()
++        wspace = getattr(gs, "wspace", getattr(gs, "_wspace", None))
++        hspace = getattr(gs, "hspace", getattr(gs, "_hspace", None))
++        wspace = 0 if wspace is None else wspace
++        hspace = 0 if hspace is None else hspace
++
++        cell_w = 1 / (ncols + wspace * (ncols - 1))
++        sep_w = wspace * cell_w
++        cell_widths = wr * cell_w * ncols / wr.sum()
++        x0 = (cell_widths[:self._subplotspec.colspan.start].sum()
++              + sep_w * self._subplotspec.colspan.start)
++        x1 = (cell_widths[:self._subplotspec.colspan.stop].sum()
++              + sep_w * (self._subplotspec.colspan.stop - 1))
++
++        cell_h = 1 / (nrows + hspace * (nrows - 1))
++        sep_h = hspace * cell_h
++        cell_heights = hr * cell_h * nrows / hr.sum()
++        y1 = 1 - (cell_heights[:self._subplotspec.rowspan.start].sum()
++                  + sep_h * self._subplotspec.rowspan.start)
++        y0 = 1 - (cell_heights[:self._subplotspec.rowspan.stop].sum()
++                  + sep_h * (self._subplotspec.rowspan.stop - 1))
++        dx = x1 - x0
++        dy = y1 - y0
+         if self.bbox_relative is None:
+             self.bbox_relative = Bbox.from_bounds(x0, y0, dx, dy)
+         else:

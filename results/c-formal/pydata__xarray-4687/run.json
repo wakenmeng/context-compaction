@@ -1,0 +1,38 @@
+{
+  "attempt": 1,
+  "code_commit": "12a7e8db2c290851e7ffcdec0d27b198e00193a1",
+  "config_sha256": "3521e64c682ab2f817bf5047fe53c9237c0e4e973316d7752055bc801af02508",
+  "exit_status": "ContextOverflow",
+  "finished": 1793867867.143154,
+  "group": "c",
+  "instance_id": "pydata__xarray-4687",
+  "model": "openai/gpt-5.6-sol",
+  "started": 1793867712.382335,
+  "summary": {
+    "compactions": 2,
+    "cost": 0.38119739999999996,
+    "fallbacks": 0,
+    "hist_calls": 0,
+    "overflow": true,
+    "rebuilds": 0,
+    "steps": 16,
+    "usage": {
+      "agent": {
+        "cached_input": 89643,
+        "calls": 16,
+        "cost": 0.2751992,
+        "input": 116941,
+        "output": 5145,
+        "reasoning": 863
+      },
+      "compaction": {
+        "cached_input": 31958,
+        "calls": 3,
+        "cost": 0.10599820000000001,
+        "input": 39450,
+        "output": 2799,
+        "reasoning": 261
+      }
+    }
+  }
+}

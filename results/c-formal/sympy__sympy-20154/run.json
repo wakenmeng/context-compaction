@@ -1,0 +1,38 @@
+{
+  "attempt": 1,
+  "code_commit": "12a7e8db2c290851e7ffcdec0d27b198e00193a1",
+  "config_sha256": "3521e64c682ab2f817bf5047fe53c9237c0e4e973316d7752055bc801af02508",
+  "exit_status": "Submitted",
+  "finished": 1793868279.300598,
+  "group": "c",
+  "instance_id": "sympy__sympy-20154",
+  "model": "openai/gpt-5.6-sol",
+  "started": 1793868207.9856203,
+  "summary": {
+    "compactions": 1,
+    "cost": 0.1822062,
+    "fallbacks": 0,
+    "hist_calls": 0,
+    "overflow": false,
+    "rebuilds": 0,
+    "steps": 12,
+    "usage": {
+      "agent": {
+        "cached_input": 57721,
+        "calls": 12,
+        "cost": 0.1542424,
+        "input": 72071,
+        "output": 2972,
+        "reasoning": 321
+      },
+      "compaction": {
+        "cached_input": 11272,
+        "calls": 1,
+        "cost": 0.027963800000000004,
+        "input": 12534,
+        "output": 861,
+        "reasoning": 0
+      }
+    }
+  }
+}

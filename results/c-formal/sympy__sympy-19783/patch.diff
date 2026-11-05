@@ -1,0 +1,33 @@
+diff --git a/sympy/physics/quantum/dagger.py b/sympy/physics/quantum/dagger.py
+index 17da3cfd2c..39999b4bd2 100644
+--- a/sympy/physics/quantum/dagger.py
++++ b/sympy/physics/quantum/dagger.py
+@@ -85,5 +85,13 @@ def __new__(cls, arg):
+             return obj
+         return Expr.__new__(cls, arg)
+ 
++    def __mul__(self, other):
++        # Import here to avoid a circular import with operator.py.
++        from sympy.physics.quantum.operator import IdentityOperator, Operator
++        if (isinstance(self.args[0], Operator) and
++                isinstance(other, IdentityOperator)):
++            return self
++        return Expr.__mul__(self, other)
++
+ adjoint.__name__ = "Dagger"
+ adjoint._sympyrepr = lambda a, b: "Dagger(%s)" % b._print(a.args[0])
+diff --git a/sympy/physics/quantum/operator.py b/sympy/physics/quantum/operator.py
+index 306bfee64f..70f33f43df 100644
+--- a/sympy/physics/quantum/operator.py
++++ b/sympy/physics/quantum/operator.py
+@@ -307,7 +307,9 @@ def _print_contents_latex(self, printer, *args):
+ 
+     def __mul__(self, other):
+ 
+-        if isinstance(other, Operator):
++        if (isinstance(other, Operator) or
++                (isinstance(other, Dagger) and
++                 isinstance(other.args[0], Operator))):
+             return other
+ 
+         return Mul(self, other)

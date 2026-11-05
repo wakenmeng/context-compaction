@@ -1,0 +1,27 @@
+{
+  "compactions": 3,
+  "cost": 0.4208534,
+  "fallbacks": 0,
+  "hist_calls": 0,
+  "overflow": false,
+  "rebuilds": 0,
+  "steps": 21,
+  "usage": {
+    "agent": {
+      "cached_input": 128395,
+      "calls": 21,
+      "cost": 0.32272000000000006,
+      "input": 160884,
+      "output": 5449,
+      "reasoning": 470
+    },
+    "compaction": {
+      "cached_input": 32921,
+      "calls": 3,
+      "cost": 0.09813340000000001,
+      "input": 39631,
+      "output": 2582,
+      "reasoning": 277
+    }
+  }
+}

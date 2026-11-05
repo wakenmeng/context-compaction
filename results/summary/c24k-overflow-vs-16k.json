@@ -1,0 +1,320 @@
+{
+  "compare_summary": {
+    "by_repo": {
+      "astropy": "4/5",
+      "django": "40/46",
+      "matplotlib": "4/7",
+      "psf": "2/2",
+      "pydata": "3/4",
+      "pylint-dev": "0/2",
+      "pytest-dev": "4/4",
+      "scikit-learn": "6/6",
+      "sphinx-doc": "6/9",
+      "sympy": "13/15"
+    },
+    "compaction_cost": 5.0055848,
+    "compactions": {
+      "fallback": 1,
+      "patch": 122
+    },
+    "cost_mean": 0.265405842,
+    "cost_median": 0.21675860000000002,
+    "cost_total": 26.5405842,
+    "empty_patches": 2,
+    "exit_status": {
+      "ContextOverflow": 8,
+      "Submitted": 92
+    },
+    "hist_calls": 10,
+    "max_underestimate": 240,
+    "overflow_resolved_anyway": 3,
+    "patches_first_try": 107,
+    "peak_tokens": 15414,
+    "repeat_counts": [
+      3,
+      877,
+      72
+    ],
+    "repeat_rate": 0.0034207525655644243,
+    "resolved": 82,
+    "resolved_ci95": [
+      0.7333246397578691,
+      0.8829986834574896
+    ],
+    "resolved_rate": 0.82,
+    "revived": 61,
+    "stale_marked": 218,
+    "steps_mean": 14.52,
+    "tasks": 100,
+    "tasks_with_compaction": 72,
+    "tight_truncations": 9,
+    "unresolved": [
+      "astropy__astropy-14365",
+      "django__django-10999",
+      "django__django-13513",
+      "django__django-13794",
+      "django__django-14034",
+      "django__django-14534",
+      "django__django-16560",
+      "matplotlib__matplotlib-25479",
+      "matplotlib__matplotlib-26208",
+      "matplotlib__matplotlib-26466",
+      "pydata__xarray-4687",
+      "pylint-dev__pylint-4661",
+      "pylint-dev__pylint-6386",
+      "sphinx-doc__sphinx-7440",
+      "sphinx-doc__sphinx-9229",
+      "sphinx-doc__sphinx-9461",
+      "sympy__sympy-16597",
+      "sympy__sympy-21930"
+    ]
+  },
+  "comparison": [
+    {
+      "a": {
+        "compactions": [
+          "patch"
+        ],
+        "cost": 0.34491419999999995,
+        "exit_status": "Submitted",
+        "peak_tokens": 20259,
+        "resolved": true,
+        "steps": 16
+      },
+      "b": {
+        "compactions": [
+          "patch"
+        ],
+        "cost": 0.283703,
+        "exit_status": "ContextOverflow",
+        "peak_tokens": 14457,
+        "resolved": true,
+        "steps": 11
+      },
+      "instance_id": "django__django-14631"
+    },
+    {
+      "a": {
+        "compactions": [
+          "patch"
+        ],
+        "cost": 0.31262439999999997,
+        "exit_status": "Submitted",
+        "peak_tokens": 19982,
+        "resolved": true,
+        "steps": 19
+      },
+      "b": {
+        "compactions": [],
+        "cost": 0.14568100000000003,
+        "exit_status": "ContextOverflow",
+        "peak_tokens": 14734,
+        "resolved": false,
+        "steps": 5
+      },
+      "instance_id": "matplotlib__matplotlib-26208"
+    },
+    {
+      "a": {
+        "compactions": [
+          "patch",
+          "patch"
+        ],
+        "cost": 0.6194996000000002,
+        "exit_status": "Submitted",
+        "peak_tokens": 20217,
+        "resolved": true,
+        "steps": 27
+      },
+      "b": {
+        "compactions": [
+          "patch",
+          "patch"
+        ],
+        "cost": 0.38119739999999996,
+        "exit_status": "ContextOverflow",
+        "peak_tokens": 14805,
+        "resolved": false,
+        "steps": 16
+      },
+      "instance_id": "pydata__xarray-4687"
+    },
+    {
+      "a": {
+        "compactions": [
+          "patch"
+        ],
+        "cost": 0.33591000000000004,
+        "exit_status": "Submitted",
+        "peak_tokens": 22520,
+        "resolved": true,
+        "steps": 16
+      },
+      "b": {
+        "compactions": [
+          "patch",
+          "patch",
+          "patch",
+          "patch"
+        ],
+        "cost": 0.7705257999999999,
+        "exit_status": "ContextOverflow",
+        "peak_tokens": 15231,
+        "resolved": false,
+        "steps": 27
+      },
+      "instance_id": "sphinx-doc__sphinx-7440"
+    },
+    {
+      "a": {
+        "compactions": [
+          "patch"
+        ],
+        "cost": 0.380002,
+        "exit_status": "Submitted",
+        "peak_tokens": 22576,
+        "resolved": true,
+        "steps": 19
+      },
+      "b": {
+        "compactions": [
+          "patch"
+        ],
+        "cost": 0.27539660000000005,
+        "exit_status": "ContextOverflow",
+        "peak_tokens": 14501,
+        "resolved": true,
+        "steps": 12
+      },
+      "instance_id": "sphinx-doc__sphinx-7454"
+    },
+    {
+      "a": {
+        "compactions": [
+          "patch",
+          "patch",
+          "patch"
+        ],
+        "cost": 0.678291,
+        "exit_status": "Submitted",
+        "peak_tokens": 20060,
+        "resolved": false,
+        "steps": 32
+      },
+      "b": {
+        "compactions": [
+          "patch",
+          "patch",
+          "patch",
+          "patch",
+          "patch",
+          "fallback"
+        ],
+        "cost": 0.7931806,
+        "exit_status": "ContextOverflow",
+        "peak_tokens": 15331,
+        "resolved": false,
+        "steps": 27
+      },
+      "instance_id": "sphinx-doc__sphinx-9229"
+    },
+    {
+      "a": {
+        "compactions": [
+          "patch",
+          "patch",
+          "patch",
+          "fallback"
+        ],
+        "cost": 1.0656962,
+        "exit_status": "Submitted",
+        "peak_tokens": 22032,
+        "resolved": true,
+        "steps": 47
+      },
+      "b": {
+        "compactions": [
+          "patch",
+          "patch"
+        ],
+        "cost": 0.40308340000000004,
+        "exit_status": "ContextOverflow",
+        "peak_tokens": 15211,
+        "resolved": false,
+        "steps": 16
+      },
+      "instance_id": "sphinx-doc__sphinx-9461"
+    },
+    {
+      "a": {
+        "compactions": [],
+        "cost": 0.1728798,
+        "exit_status": "Submitted",
+        "peak_tokens": 13525,
+        "resolved": false,
+        "steps": 12
+      },
+      "b": {
+        "compactions": [
+          "patch",
+          "patch"
+        ],
+        "cost": 0.40970400000000007,
+        "exit_status": "ContextOverflow",
+        "peak_tokens": 15105,
+        "resolved": true,
+        "steps": 13
+      },
+      "instance_id": "sympy__sympy-13091"
+    }
+  ],
+  "results": "results/c24k-overflow",
+  "summary": {
+    "by_repo": {
+      "django": "1/1",
+      "matplotlib": "1/1",
+      "pydata": "1/1",
+      "sphinx-doc": "3/4",
+      "sympy": "0/1"
+    },
+    "compaction_cost": 0.5725086,
+    "compactions": {
+      "fallback": 1,
+      "patch": 12
+    },
+    "cost_mean": 0.48872715,
+    "cost_median": 0.3624581,
+    "cost_total": 3.9098172,
+    "empty_patches": 0,
+    "exit_status": {
+      "Submitted": 8
+    },
+    "hist_calls": 1,
+    "max_underestimate": 203,
+    "overflow_resolved_anyway": 0,
+    "patches_first_try": 12,
+    "peak_tokens": 22576,
+    "repeat_counts": [
+      0,
+      125,
+      7
+    ],
+    "repeat_rate": 0.0,
+    "resolved": 6,
+    "resolved_ci95": [
+      0.40926987910258916,
+      0.9285223111419724
+    ],
+    "resolved_rate": 0.75,
+    "revived": 3,
+    "stale_marked": 28,
+    "steps_mean": 23.5,
+    "tasks": 8,
+    "tasks_with_compaction": 7,
+    "tight_truncations": 0,
+    "unresolved": [
+      "sphinx-doc__sphinx-9229",
+      "sympy__sympy-13091"
+    ]
+  }
+}

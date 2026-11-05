@@ -1,0 +1,38 @@
+{
+  "attempt": 1,
+  "code_commit": "12a7e8db2c290851e7ffcdec0d27b198e00193a1",
+  "config_sha256": "3521e64c682ab2f817bf5047fe53c9237c0e4e973316d7752055bc801af02508",
+  "exit_status": "Submitted",
+  "finished": 1793867896.3769538,
+  "group": "c",
+  "instance_id": "pylint-dev__pylint-6386",
+  "model": "openai/gpt-5.6-sol",
+  "started": 1793867783.0561829,
+  "summary": {
+    "compactions": 1,
+    "cost": 0.2582316,
+    "fallbacks": 0,
+    "hist_calls": 0,
+    "overflow": false,
+    "rebuilds": 0,
+    "steps": 17,
+    "usage": {
+      "agent": {
+        "cached_input": 94405,
+        "calls": 17,
+        "cost": 0.220121,
+        "input": 114407,
+        "output": 4120,
+        "reasoning": 940
+      },
+      "compaction": {
+        "cached_input": 11589,
+        "calls": 1,
+        "cost": 0.0381106,
+        "input": 13095,
+        "output": 1301,
+        "reasoning": 37
+      }
+    }
+  }
+}

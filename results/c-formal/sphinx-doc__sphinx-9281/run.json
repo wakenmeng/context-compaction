@@ -1,0 +1,38 @@
+{
+  "attempt": 1,
+  "code_commit": "12a7e8db2c290851e7ffcdec0d27b198e00193a1",
+  "config_sha256": "3521e64c682ab2f817bf5047fe53c9237c0e4e973316d7752055bc801af02508",
+  "exit_status": "Submitted",
+  "finished": 1793868126.3792567,
+  "group": "c",
+  "instance_id": "sphinx-doc__sphinx-9281",
+  "model": "openai/gpt-5.6-sol",
+  "started": 1793868018.9777792,
+  "summary": {
+    "compactions": 2,
+    "cost": 0.3023920000000001,
+    "fallbacks": 0,
+    "hist_calls": 0,
+    "overflow": false,
+    "rebuilds": 0,
+    "steps": 15,
+    "usage": {
+      "agent": {
+        "cached_input": 86260,
+        "calls": 15,
+        "cost": 0.242634,
+        "input": 110451,
+        "output": 4361,
+        "reasoning": 361
+      },
+      "compaction": {
+        "cached_input": 23170,
+        "calls": 2,
+        "cost": 0.059758000000000006,
+        "input": 26102,
+        "output": 1799,
+        "reasoning": 164
+      }
+    }
+  }
+}
