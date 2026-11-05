@@ -1,0 +1,26 @@
+# Group C: structured state with validated patches, event log and hist, fixed 16K/12K
+# Applied on top of mini-swe-agent's built-in config/benchmarks/swebench.yaml;
+# only the differences live here, so the shared parts stay identical to upstream
+base: swebench
+
+agent:
+  # shared by every group, frozen before the smoke run
+  step_limit: 250
+  cost_limit: 3.0
+  # appended to the upstream instance template; explains hist and output truncation
+  instance_template_suffix: "\n\n{{hist_help}}\n"
+
+compaction:
+  hard_limit: 16000
+  threshold: 12000
+  state_cap: 3000
+  recent_events: 2
+  tool_output_chars: 4000
+  max_patch_retries: 1
+
+model:
+  model_name: openai/gpt-5.6-sol
+  model_kwargs:
+    reasoning_effort: medium
+    parallel_tool_calls: true
+    drop_params: true

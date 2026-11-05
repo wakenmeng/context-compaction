@@ -29,7 +29,7 @@ Treat compaction as maintaining a **Markov working state**: given the state and 
 | C | Same 16K/12K | Structured state with validated patches, event log and `hist` |
 | E | C plus temporary expansion, at most 3 times per task | Same as C |
 
-The formal runs compare **B and E** on the same 100 SWE-bench Verified tasks with the same model and step limits. C is implemented and used to validate the code. Because E changes both the state and the context budget, a win for E is a win for the package, not for either part alone.
+C runs first: it is tuned on the 20 smoke tasks only, frozen, then run on the 100 formal tasks. B and E follow; how the groups are compared, and the cost threshold, are registered before they run. Because E changes both the state and the context budget, a win for E would be a win for the package, not for either part alone.
 
 The hypotheses and decision rules are pre-registered in [docs/plan.md](docs/plan.md) (Chinese) before any agent run: E must not solve more than 3 fewer tasks than B, must repeat less work after compaction (paired bootstrap on a frozen definition of a repeated action), and must stay under a cost ratio fixed before the smoke run. Results that do not meet these rules will be reported as such.
 
@@ -39,8 +39,8 @@ The hypotheses and decision rules are pre-registered in [docs/plan.md](docs/plan
 | --- | --- | --- |
 | M0 | Sampling, pinned environment, gold validation on x86 | Done |
 | M1 | Event log, state schema, patch validator, invalidation, fallback and rebuild | Done |
-| M2 | Context assembly, token budget, `hist`, replay on recorded traces | Next |
-| M3 | mini-swe-agent integration, B/C/E configs, one task end to end | |
+| M2 | Context assembly, token budget, `hist`, end-to-end tests on scripted traces | Done for C |
+| M3 | mini-swe-agent integration, B/C/E configs, one task end to end | C integrated; one real task next |
 | M4 | 20-task smoke run, tuning, then freeze the config | |
 | M5 | 100-task runs for B and E, official evaluation | |
 | M6 | Statistics and report | |
@@ -64,6 +64,8 @@ No agent run has happened yet, so there are no results.
 | `src/context_compaction/state.py` | State schema and versioned store |
 | `src/context_compaction/patch.py` | Patch validation, invalidation, rebuild after a fallback |
 | `src/context_compaction/compactor.py` | One compaction turn: patch, one shared retry, text fallback, rebuild |
+| `src/context_compaction/agent.py` | mini-swe-agent integration: token budget, compaction and reset, `hist`, per-action logging |
+| `src/context_compaction/context.py`, `hist.py`, `repo_files.py` | Context assembly, history tool, in-container file hashing |
 | `src/context_compaction/pins.py` | Pinned versions and dataset snapshot |
 | `scripts/` | Sampling, dataset download, environment check, gold evaluation, cloud VM |
 | `configs/` | Frozen task list and excluded tasks |
@@ -103,6 +105,7 @@ scripts/cloud/gcp.sh stop
 - `setup` syncs the code (not `.env`, data or results), copies the key file to the VM with mode 600, installs Docker, uv and the locked dependencies, runs the tests and downloads the dataset.
 - `run` starts a job in tmux on the VM; `pull` brings `results/` back; `stop` leaves only the disk billed.
 - `check_env.py` exits non-zero on any failed check and never prints the key. `gold_eval.py` exits non-zero if a gold patch does not resolve; `--run-id` starts a fresh run.
+- `run_group.py --group c --set smoke` runs a group and writes `results/c/<instance_id>/` (events, states, compactions, trajectory, usage, patch); rerunning resumes, and unfinished attempts are archived, at most 3 per task. `evaluate_group.py --group c --set smoke` scores one frozen set with the official harness.
 
 ## Pinned versions
 

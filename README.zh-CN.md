@@ -29,7 +29,7 @@
 | C | 同样 16K/12K | 经过校验的结构化状态、事件日志和 `hist` |
 | E | C 加上临时扩容，每题最多 3 次 | 同 C |
 
-正式实验比较 **B 和 E**：同样的 100 道 SWE-bench Verified 题、同一个模型、同样的步数上限。C 已经实现，用来验证代码。E 同时改变了状态写法和上下文预算，所以 E 胜出只能说明整套方案更好，不能归功于其中某一部分
+先跑 C：只用 20 道冒烟题调参，冻结配置后再跑 100 道正式题。B 和 E 之后再跑；各组怎么比较、费用阈值是多少，在它们运行之前登记。E 同时改变了状态写法和上下文预算，所以如果 E 胜出，也只能说明整套方案更好，不能归功于其中某一部分
 
 假设和判定规则在任何 agent 运行之前就预登记在 [docs/plan.md](docs/plan.md)：E 少解的题不能超过 B 3 题；压缩后的重复工作要少于 B（对冻结的“重复动作”定义做配对 bootstrap）；费用比要低于冒烟前确定的阈值。不满足这些规则的结果也会如实报告
 
@@ -39,8 +39,8 @@
 | --- | --- | --- |
 | M0 | 抽样、锁定环境、x86 gold 验证 | 已完成 |
 | M1 | 事件日志、状态 schema、patch 校验器、失效规则、回退和重建 | 已完成 |
-| M2 | 上下文组装、token 预算、`hist`、录制 trace 回放 | 下一步 |
-| M3 | 接入 mini-swe-agent，B/C/E 配置，1 题端到端 | |
+| M2 | 上下文组装、token 预算、`hist`、脚本化 trace 的端到端测试 | C 已完成 |
+| M3 | 接入 mini-swe-agent，B/C/E 配置，1 题端到端 | C 已接入，下一步跑 1 道真实题 |
 | M4 | 20 题冒烟，调参后冻结配置 | |
 | M5 | B 和 E 各跑 100 题，官方评测 | |
 | M6 | 统计分析和报告 | |
@@ -64,6 +64,8 @@
 | `src/context_compaction/state.py` | 状态 schema 和带版本的存储 |
 | `src/context_compaction/patch.py` | patch 校验、失效、回退后的重建 |
 | `src/context_compaction/compactor.py` | 一次压缩：patch、共用一次重试、文本回退、重建 |
+| `src/context_compaction/agent.py` | 接入 mini-swe-agent：token 预算、压缩与重置、`hist`、逐动作记录 |
+| `src/context_compaction/context.py`、`hist.py`、`repo_files.py` | 上下文组装、历史检索工具、容器内文件哈希 |
 | `src/context_compaction/pins.py` | 固定的版本和数据快照 |
 | `scripts/` | 抽样、数据下载、环境检查、gold 评测、云主机 |
 | `configs/` | 冻结的题目名单和排除名单 |
@@ -103,6 +105,7 @@ scripts/cloud/gcp.sh stop
 - `setup` 同步代码（不含 `.env`、数据和结果），把 key 文件以 600 权限复制到云主机，安装 Docker、uv 和锁定的依赖，跑单测并下载数据
 - `run` 在云主机的 tmux 里启动任务；`pull` 把 `results/` 拉回本地；`stop` 后只收磁盘费
 - `check_env.py` 任何一项失败都返回非零，不会打印 key。`gold_eval.py` 有 gold 补丁没通过时返回非零；`--run-id` 可以开一次全新的运行
+- `run_group.py --group c --set smoke` 跑一个组，结果写在 `results/c/<instance_id>/`（事件、状态、压缩记录、轨迹、用量、patch）；重跑会续跑，未完成的尝试会归档，每题最多 3 次。`evaluate_group.py --group c --set smoke` 用官方 harness 给一个冻结集合打分
 
 ## 固定版本
 

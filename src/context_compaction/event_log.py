@@ -10,7 +10,7 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-KINDS = {"snapshot", "action", "model", "compaction", "note"}
+KINDS = {"snapshot", "action", "hist", "model", "compaction", "note"}
 
 
 @dataclass(frozen=True)
