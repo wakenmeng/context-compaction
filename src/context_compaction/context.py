@@ -20,13 +20,23 @@ class Budget:
     # a compaction turn is attempted with whatever room is left, as in the paper;
     # below this it cannot produce anything useful, so the run overflows instead
     min_compaction_output: int = 1_024
+    # kept back from every output limit: input estimates can still run a little under
+    # the API's count (by up to 166 tokens over the 20 smoke tasks)
+    output_safety: int = 300
 
-    def normal_output(self, input_tokens):
-        return self.hard_limit - input_tokens
+    # a normal reply never gets less than this, even when the next compaction is near;
+    # the longest of 301 trial and smoke replies was 976 tokens
+    min_normal_output: int = 2_048
+
+    def normal_output(self, input_tokens, next_compaction_tokens=0):
+        """Room for a normal reply, keeping space for the compaction turn that may follow it"""
+        room = self.hard_limit - input_tokens - self.output_safety
+        keep = next_compaction_tokens + self.min_compaction_output if next_compaction_tokens else 0
+        return min(room, max(self.min_normal_output, room - keep))
 
     def compaction_output(self, input_tokens):
         """Output room for a compaction turn, or None when it is too small to try"""
-        room = self.hard_limit - input_tokens
+        room = self.hard_limit - input_tokens - self.output_safety
         return room if room >= self.min_compaction_output else None
 
 

@@ -30,6 +30,7 @@ from .state import StateStore, render
 from .tokens import count_tokens
 
 TOOLS = [BASH_TOOL]
+MESSAGE_OVERHEAD_TOKENS = 4
 logger = logging.getLogger("context_compaction.agent")
 
 
@@ -46,6 +47,11 @@ class CompactingAgentConfig(AgentConfig):
     tool_output_chars: int = 4_000
     max_patch_retries: int = 1
     min_compaction_output: int = 1_024
+    output_safety: int = 300
+    min_normal_output: int = 2_048
+    # tool outputs are cut shorter, down to this, when a full-length cut would leave no
+    # room for the next compaction turn
+    min_tool_output_chars: int = 500
     # added to local estimates that no API-reported count backs, e.g. right after a reset
     estimate_margin: float = 0.05
     # on top of an API-anchored count: the local tokenizer misses chat formatting of new
@@ -79,7 +85,8 @@ class CompactingAgent(DefaultAgent):
     def __init__(self, model, env, *, compaction_call=None, count=count_tokens, **kwargs):
         super().__init__(model, env, config_class=CompactingAgentConfig, **kwargs)
         cfg = self.config
-        self.budget = Budget(cfg.hard_limit, cfg.threshold, cfg.state_cap, cfg.min_compaction_output)
+        self.budget = Budget(cfg.hard_limit, cfg.threshold, cfg.state_cap, cfg.min_compaction_output,
+                             cfg.output_safety, cfg.min_normal_output)
         self.count = count
         self.compaction_call = compaction_call or self._litellm_compaction
         self.files = RepoFiles(env)
@@ -102,6 +109,7 @@ class CompactingAgent(DefaultAgent):
         )
         self.context = []
         self.extra_template_vars |= {"hist_help": HIST_HELP.format(limit=self.config.tool_output_chars)}
+
         info = super().run(task, **kwargs)
         if info.get("exit_status") != "Submitted" and not info.get("submission"):
             # the plan submits the current result on every stop, the same way for every group
@@ -151,8 +159,11 @@ class CompactingAgent(DefaultAgent):
             tokens = self.input_tokens(self.context)
         self.n_calls += 1
         sent = list(self.context)
+        next_prompt = self.count(self.compactor.next_request()) + MESSAGE_OVERHEAD_TOKENS
+        max_tokens = self.budget.normal_output(tokens, next_prompt)
+        self._call_budget = {"max_output": max_tokens, "next_compaction": next_prompt}
         try:
-            message = self.model.query(self.context, max_tokens=self.budget.normal_output(tokens))
+            message = self.model.query(self.context, max_tokens=max_tokens)
         except FormatError as e:
             # the call was made and billed even though its output is unusable
             response = (e.messages[0].get("extra") or {}).get("response") if e.messages else None
@@ -175,7 +186,7 @@ class CompactingAgent(DefaultAgent):
         self.cost += cost
         self._remember(sent, usage)
         self.log.append("model", purpose="agent", estimated_input=tokens, cost=cost, usage=usage,
-                        finish_reason=finish_reason(response), format_error=format_error,
+                        finish_reason=finish_reason(response), format_error=format_error, **getattr(self, "_call_budget", {}),
                         raw_estimate=context_tokens(sent or [], TOOLS, self.count))
 
     def _remember(self, sent, usage):
@@ -286,14 +297,13 @@ class CompactingAgent(DefaultAgent):
     # ---------- actions ----------
 
     def execute_actions(self, message):
-        limit = self.config.tool_output_chars
-        outputs = []
+        results = []  # (event id, full text, output dict, hist command or None)
         for action in message.get("extra", {}).get("actions", []):
             command = action.get("command", "")
             if hist.is_hist(command):
-                code, text = hist.run(self.log, command, limit)
+                code, text = hist.run(self.log, command, self.config.tool_output_chars)
                 event = self.log.append("hist", command=command, returncode=code, output=text)
-                outputs.append({"output": f"[{event.id}]\n{text}", "returncode": code, "exception_info": ""})
+                results.append((event.id, text, {"returncode": code, "exception_info": ""}, command))
                 continue
             try:
                 out = self.env.execute(action)
@@ -302,9 +312,39 @@ class CompactingAgent(DefaultAgent):
                 raise
             event = self.log.action(command, out.get("output", ""), self.files.current(),
                                     returncode=out.get("returncode"), exception_info=out.get("exception_info", ""))
-            shown = truncate_output(out.get("output", ""), limit, event.id)
-            outputs.append({**out, "output": f"[{event.id}]\n{shown}"})
-        return self.add_messages(*self.model.format_observation_messages(message, outputs, self.get_template_vars()))
+            results.append((event.id, out.get("output", ""), out, None))
+        observations = self._fit_observations(message, results)
+        return self.add_messages(*observations)
+
+    def _observations(self, message, results, limit):
+        outputs = []
+        for event_id, text, out, hist_command in results:
+            if hist_command is not None:
+                # cut the answer already given; re-running the query would see later events
+                shown = text if len(text) <= limit else text[:limit] + "\n[cut to fit the context budget; narrow the query]"
+            else:
+                shown = truncate_output(text, limit, event_id)
+            outputs.append({**out, "output": f"[{event_id}]\n{shown}"})
+        return self.model.format_observation_messages(message, outputs, self.get_template_vars())
+
+    def _fit_observations(self, message, results):
+        """Cut this step's outputs shorter when full-length cuts would leave the next
+        compaction turn without room; the full text stays in the log for `hist`"""
+        limit = self.config.tool_output_chars
+        # the exact request the next compaction would send: patch or, after a fallback, rebuild
+        request = {"role": "user", "content": self.compactor.next_request()}
+        reserve = self.budget.min_compaction_output + self.budget.output_safety
+        while True:
+            observations = self._observations(message, results, limit)
+            projected = self.input_tokens(self.context + observations + [request])
+            fits = projected + reserve <= self.budget.hard_limit
+            if fits or limit <= self.config.min_tool_output_chars:
+                break
+            limit = max(self.config.min_tool_output_chars, limit // 2)
+        if limit < self.config.tool_output_chars:
+            # fits=False: even the floor leaves no room, so the next compaction overflows as the plan allows
+            self.log.append("note", what="tight_truncation", limit=limit, compaction_input=projected, fits=fits)
+        return observations
 
     # ---------- results ----------
 

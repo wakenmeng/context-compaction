@@ -94,7 +94,8 @@ def make_agent(repo, tmp_path, steps, compaction, **over):
         "instance_template": "Task: {{task}}\n{{hist_help}}", "step_limit": 30, "cost_limit": 10.0,
         "hard_limit": 2400, "threshold": 400, "state_cap": 200, "recent_events": 2, "tool_output_chars": 300,
         # reserves scaled down with the toy budget
-        "anchor_reserve": 10, "anchor_reserve_per_message": 4,
+        "anchor_reserve": 10, "anchor_reserve_per_message": 4, "output_safety": 30, "min_compaction_output": 200,
+        "min_normal_output": 100,
     }
     agent = CompactingAgent(ScriptedModel(steps), env, compaction_call=compaction, count=COUNT, **{**kwargs, **over})
     agent.files.repo = str(repo)
@@ -180,7 +181,10 @@ def test_output_limit_tracks_the_hard_limit(repo, tmp_path):
     agent = make_agent(repo, tmp_path, [["ls"], ["ls -a"], [SUBMIT]], ScriptedCompaction())
     agent.run("t")
     calls = [e.payload for e in EventLog(tmp_path / "run" / "events.jsonl").events if e.kind == "model"]
-    assert agent.model.max_tokens == [2400 - c["estimated_input"] for c in calls]
+    for sent, c in zip(agent.model.max_tokens, calls):
+        room = 2400 - c["estimated_input"] - 30
+        assert sent == c["max_output"] == min(room, max(100, room - c["next_compaction"] - 200))
+    assert any(c["max_output"] < 2400 - c["estimated_input"] - 30 for c in calls), "the next compaction is kept room for"
 
 
 def test_estimates_anchor_on_the_api_count(repo, tmp_path):
@@ -204,7 +208,8 @@ def test_estimates_anchor_on_the_api_count(repo, tmp_path):
 def test_compaction_without_room_overflows_with_current_diff(repo, tmp_path):
     big = "python3 -c \"print('y' * 3000)\""
     steps = [[edit("1", "3")], [big], [big], [big]]
-    agent = make_agent(repo, tmp_path, steps, ScriptedCompaction(), tool_output_chars=3000, hard_limit=1400, state_cap=600)
+    agent = make_agent(repo, tmp_path, steps, ScriptedCompaction(), tool_output_chars=3000, hard_limit=1400,
+                       state_cap=600, min_compaction_output=1024)
     info = agent.run("t")
     assert info["exit_status"] == "ContextOverflow" and "+    return 3" in info["submission"]
     assert agent.summary()["overflow"] is True
@@ -449,9 +454,10 @@ def test_unfinished_attempts_are_archived_and_capped(tmp_path):
 
 def test_compaction_uses_the_room_left_as_in_the_paper():
     budget = context.Budget()
-    # the trial's compaction turn: 13,286 input tokens left 2,714, under the old 3K rule it never ran
-    assert budget.compaction_output(13_286) == 2_714
-    assert budget.compaction_output(15_100) is None
+    # the trial's compaction turn: 13,286 input tokens left 2,714 (2,414 after the safety
+    # margin); under the old 3K rule it never ran
+    assert budget.compaction_output(13_286) == 2_414
+    assert budget.compaction_output(14_800) is None
 
 
 class Truncating(ScriptedCompaction):
@@ -550,3 +556,55 @@ def test_retries_anchor_on_the_compaction_calls_api_count(repo, tmp_path):
     rows = [json.loads(line) for line in (tmp_path / "run" / "compactions.jsonl").read_text().splitlines()]
     added = context.context_tokens(rows[1]["request"][len(rows[0]["request"]):], (), COUNT)
     assert retry["estimated_input"] == first["usage"]["input"] + added + 10 + 4 * 2
+
+
+# ---------- adaptive truncation (after the astropy__astropy-14508 smoke overflow) ----------
+
+
+def adaptive_patch(messages):
+    version = int(re.search(r"Current state, version (\d+)", messages[-1]["content"]).group(1))
+    if version == 0:
+        return first_patch(messages)
+    return json.dumps({"base_version": version, "ops": [{"op": "set", "field": "next_action", "value": "go"}]})
+
+
+@pytest.mark.parametrize("shrink", [True, False])
+def test_big_step_is_cut_shorter_so_compaction_still_fits(repo, tmp_path, shrink):
+    huge = "python3 -c \"print('n' * 9000)\""
+    steps = [["cat a.py"], [huge, huge], [SUBMIT]]
+    # two parallel outputs at full length would push the compaction request past the hard limit
+    agent = make_agent(repo, tmp_path, steps, ScriptedCompaction(*[adaptive_patch] * 5), tool_output_chars=3000,
+                       threshold=900, hard_limit=2400, min_compaction_output=600,
+                       min_tool_output_chars=500 if shrink else 3000)
+    info = agent.run("t")
+    log = EventLog(tmp_path / "run" / "events.jsonl")
+    tight = [e.payload for e in log.events if e.kind == "note" and e.payload.get("what") == "tight_truncation"]
+    if not shrink:
+        assert info["exit_status"] == "ContextOverflow", "the control run shows the overflow the shorter cut avoids"
+        return
+    assert info["exit_status"] == "Submitted" and tight and 500 <= tight[0]["limit"] < 3000
+    # the model saw the shorter cut, the log kept every character
+    assert all(len(e.payload["output"]) > 9000 for e in log.events if e.kind == "action" and "9000" in e.payload["command"])
+
+
+def test_shorter_cut_never_goes_below_the_floor(repo, tmp_path):
+    huge = "python3 -c \"print('m' * 9000)\""
+    agent = make_agent(repo, tmp_path, [[huge, huge, huge], [SUBMIT]], ScriptedCompaction(first_patch),
+                       tool_output_chars=3000, threshold=10_000, hard_limit=1200, min_tool_output_chars=500)
+    agent.run("t")
+    notes = [e.payload for e in EventLog(tmp_path / "run" / "events.jsonl").events
+             if e.kind == "note" and e.payload.get("what") == "tight_truncation"]
+    assert notes and notes[0]["limit"] == 500
+
+
+def test_hist_answers_are_cut_not_rerun(repo, tmp_path):
+    huge = "python3 -c \"print('k' * 9000)\""
+    # the search runs before the echo in the same step; a re-run would find the echo's output
+    steps = [["cat a.py"], ["hist search NEEDLE", "echo NEEDLE", huge, huge], [SUBMIT]]
+    agent = make_agent(repo, tmp_path, steps, ScriptedCompaction(*[adaptive_patch] * 5), tool_output_chars=3000,
+                       threshold=900, hard_limit=2400, min_compaction_output=600)
+    agent.run("t")
+    hist_obs = [m["content"] for m in agent.messages if m.get("role") == "tool" and "hist" not in m["content"][:0]
+                and "no matches" in m["content"]]
+    logged = [e.payload for e in EventLog(tmp_path / "run" / "events.jsonl").events if e.kind == "hist"]
+    assert logged[0]["output"] == "no matches" and hist_obs, "the model saw the answer that was logged"

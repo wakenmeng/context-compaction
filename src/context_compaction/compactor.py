@@ -111,8 +111,12 @@ class Compactor:
                 break
         return n
 
-    def compact(self, context, max_output_tokens):
-        """Run one compaction turn on top of `context` (the messages so far)"""
+    def next_request(self):
+        """The prompt the next compaction turn would send, without changing any state"""
+        return self._prepare(commit=False)[3]
+
+    def _prepare(self, commit):
+        """(rebuilding, base, newly stale ids, request text) for a compaction turn now"""
         rebuilding = self.store.in_fallback()
         marked = []
         if rebuilding:
@@ -126,7 +130,7 @@ class Compactor:
             )
         else:
             base, marked = patching.invalidate(self.store.current(), self.log)
-            if base != self.store.current():
+            if commit and base != self.store.current():
                 base = self.store.commit("invalidate", base)
             stale = [i["id"] for n in ("facts", "checks") for i in base[n] if i.get("status") == "stale"]
             premise = [d["id"] for d in base["dead_ends"] if d.get("premise_changed")]
@@ -134,11 +138,16 @@ class Compactor:
             if self.state_in_context and any(base[n] for n in LIST_FIELDS + ("plan",)):
                 shown = ("the latest working-state message above; since it was shown, the harness only marked "
                          "the stale entries and changed-premise dead ends listed here")
+            version = base["state_version"] if commit or base == self.store.current() else base["state_version"] + 1
             request = self.prompts["patch"].format(
-                version=base["state_version"], stale=stale or "none", premise=premise or "none",
+                version=version, stale=stale or "none", premise=premise or "none",
                 cap=self.cap, state=shown,
             )
+        return rebuilding, base, marked, request
 
+    def compact(self, context, max_output_tokens):
+        """Run one compaction turn on top of `context` (the messages so far)"""
+        rebuilding, base, marked, request = self._prepare(commit=True)
         messages = list(context) + [{"role": "user", "content": request}]
         errors, shrink = [], False
         purpose = "rebuild" if rebuilding else "patch"

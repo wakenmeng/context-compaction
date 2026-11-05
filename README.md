@@ -41,11 +41,11 @@ The plan, metrics and every amendment are pre-registered in [docs/plan.md](docs/
 | M1 | Event log, state schema, patch validator, invalidation, fallback and rebuild | Done |
 | M2 | Context assembly, token budget, `hist`, end-to-end tests on scripted traces | Done for C |
 | M3 | mini-swe-agent integration, one task end to end | C done: two smoke trials, compaction verified on real runs |
-| M4 | 20-task smoke run, tuning, then freeze the config | |
+| M4 | 20-task smoke run, tuning, then freeze the config | First pass 16/20; tuned, rerun before freezing |
 | M5 | 100-task run for C, official evaluation | |
 | M6 | Statistics and report | |
 
-Only smoke-task trials have run so far (`pallets__flask-5014` resolved; `sympy__sympy-17630` exercised three compactions under the 16K limit but did not resolve). There are no formal results yet.
+So far only the 20 smoke tasks have run, which are for tuning and are never reported as results. The first pass resolved 16 of 20 for $4.37, with 17 compactions on 11 tasks, every patch accepted on the first try and every call under 16K; one task overflowed, which led to the adaptive output cut described in the plan. There are no formal results yet.
 
 ## Engineering notes
 
