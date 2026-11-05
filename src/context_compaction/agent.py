@@ -49,9 +49,10 @@ class CompactingAgentConfig(AgentConfig):
     # added to local estimates that no API-reported count backs, e.g. right after a reset
     estimate_margin: float = 0.05
     # on top of an API-anchored count: the local tokenizer misses chat formatting of new
-    # messages (33-163 tokens per step in the first real run)
-    anchor_reserve: int = 100
-    anchor_reserve_per_message: int = 40
+    # messages; 100 + 40 per message still undercounted by up to 57 tokens on the second
+    # trial, 200 + 50 leaves at least 63 to spare on both trials
+    anchor_reserve: int = 200
+    anchor_reserve_per_message: int = 50
 
 
 def finish_reason(response):

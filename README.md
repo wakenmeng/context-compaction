@@ -29,9 +29,9 @@ Treat compaction as maintaining a **Markov working state**: given the state and 
 | C | Same 16K/12K | Structured state with validated patches, event log and `hist` |
 | E | C plus temporary expansion, at most 3 times per task | Same as C |
 
-C runs first: it is tuned on the 20 smoke tasks only, frozen, then run on the 100 formal tasks. B and E follow; how the groups are compared, and the cost threshold, are registered before they run. Because E changes both the state and the context budget, a win for E would be a win for the package, not for either part alone.
+Only C is run: it is tuned on the 20 smoke tasks only, frozen, then run on the 100 formal tasks. B (the paper baseline) and E (C plus expansion) are specified in the plan but not run, so the paired hypotheses against B are not tested; C is reported descriptively (success rate with a confidence interval, repeated work after compaction, cost, compaction outcomes). The paper's 84.6% for EoCC 16K/12K on all 500 tasks is an outside reference only, not a paired comparison.
 
-The hypotheses and decision rules are pre-registered in [docs/plan.md](docs/plan.md) (Chinese) before any agent run: E must not solve more than 3 fewer tasks than B, must repeat less work after compaction (paired bootstrap on a frozen definition of a repeated action), and must stay under a cost ratio fixed before the smoke run. Results that do not meet these rules will be reported as such.
+The plan, metrics and every amendment are pre-registered in [docs/plan.md](docs/plan.md) (Chinese) before the runs they affect. Amendments so far came from two smoke-task trials, never from formal tasks.
 
 ## Status
 
@@ -40,12 +40,12 @@ The hypotheses and decision rules are pre-registered in [docs/plan.md](docs/plan
 | M0 | Sampling, pinned environment, gold validation on x86 | Done |
 | M1 | Event log, state schema, patch validator, invalidation, fallback and rebuild | Done |
 | M2 | Context assembly, token budget, `hist`, end-to-end tests on scripted traces | Done for C |
-| M3 | mini-swe-agent integration, B/C/E configs, one task end to end | C integrated; one real task next |
+| M3 | mini-swe-agent integration, one task end to end | C done: two smoke trials, compaction verified on real runs |
 | M4 | 20-task smoke run, tuning, then freeze the config | |
-| M5 | 100-task runs for B and E, official evaluation | |
+| M5 | 100-task run for C, official evaluation | |
 | M6 | Statistics and report | |
 
-No agent run has happened yet, so there are no results.
+Only smoke-task trials have run so far (`pallets__flask-5014` resolved; `sympy__sympy-17630` exercised three compactions under the 16K limit but did not resolve). There are no formal results yet.
 
 ## Engineering notes
 
