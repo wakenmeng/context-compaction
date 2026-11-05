@@ -1,37 +1,79 @@
 # context-compaction
 
-Markov 状态压缩实验，基于 [You don't need long context](https://arxiv.org/pdf/2611.05306)
+English | [中文](README.zh-CN.md)
 
-完整方案见 [docs/plan.md](docs/plan.md)。这是预登记版本，在任何 agent 运行之前提交，成功与失败的判定规则以它为准
+An experiment on Markov-state context compaction for coding agents, built on [You don't need long context](https://arxiv.org/pdf/2611.05306) (arXiv 2611.05306).
 
-当前进度：M0 完成（抽样、锁定环境、x86 gold 验证），B/C/E 还没有开始跑
+The paper keeps contexts short by periodically rewriting the history into a text handoff (EoCC). We test whether a structured working state, updated field by field with evidence and invalidation rules, loses less information and repeats less work under the same 16K/12K budget, without lowering the success rate.
 
-## 版本
+The full plan is in [docs/plan.md](docs/plan.md) (Chinese). It is the pre-registered version, committed before any agent run; it defines what counts as success or failure.
 
-所有固定值集中在 `src/context_compaction/pins.py`，依赖全部由 `uv.lock` 锁定
+## Status
 
-| 组件 | 版本 | 说明 |
+| Milestone | Content | State |
 | --- | --- | --- |
-| Python | 3.12 | 只锁一个解释器，锁文件只有一份解析结果 |
-| mini-swe-agent | 2.4.0 | 论文只写 v2.4，小版本是我们的选择 |
-| swebench | 5.0.2 | 官方评测；论文未写版本 |
-| 数据集 | SWE-bench/SWE-bench_Verified @ `78f471bf` | 500 题，parquet sha256 写在 pins.py |
+| M0 | Sampling, pinned environment, x86 gold validation | Done |
+| M1 | Event log, state schema, patch validator, invalidation, fallback and rebuild | Done |
+| M2 | Context assembly, token budget, `hist` retrieval, replay on recorded traces | Next |
+| M3 | mini-swe-agent integration, B/C/E configs, one task end to end | |
+| M4 | 20-task smoke run, tuning, then freeze the config | |
+| M5 | 100-task formal runs and official evaluation | |
+| M6 | Decision replay, statistics, report | |
 
-数据集不用 `princeton-nlp/SWE-bench_Verified`：swebench 5.x 评测需要 `image`、`eval_script`、`log_parser` 字段，只有 `SWE-bench/` 版本有。两者 500 个 ID、题面、补丁、base commit 完全相同；PASS_TO_PASS 在 `astropy__astropy-7606`、`django__django-10097` 两题上有删减。agent 运行和评测都读同一个本地快照 `data/SWE-bench_Verified`
+No agent run has happened yet.
 
-## 抽样
+## Groups
 
-`configs/instances.json` 已生成并冻结，种子 20261104
+| Group | Context policy | After compaction |
+| --- | --- | --- |
+| B | Paper EoCC, fixed 16K limit, compacts at 12K | Text handoff written with the paper's Appendix G.1 prompt |
+| C | Same 16K/12K | Structured state JSON; the model submits field-level patches that the harness validates; full history goes to an event log the model can query with `hist` |
+| E | C plus temporary expansion to 48K or 128K, at most 3 times per task | Same as C |
 
-- 正式集 100 题：按仓库分层，配额用随机化系统取整，每题入样概率都是 1/5，直接取平均就是 500 题成功率的无偏估计。单次样本里小仓库可能为 0（本次 Flask、Seaborn 为 0），这是抽样波动，不是偏差
-- 冒烟集 20 题：从剩余 400 题中抽取，每个仓库先抽 1 题，其余按比例分配。只用于调参和环境验证，不进入任何估计
-- 输出里有 `records_sha256`，覆盖每条记录的全部字段，数据内容有任何变化都能检测到
+All three are implemented. The formal runs compare B and E only; C is used to validate the code. This scope change is being written into the pre-registration before any run.
 
-## 运行环境
+## Pinned versions
 
-所有 Docker 任务（gold 评测、冒烟、正式实验、官方评测）都在 GCP 的 x86 云主机上跑。SWE-bench 镜像都是 x86_64，在 Mac 上要靠仿真运行，环境失败和模型失败就分不清了。Mac 只用来开发和跑单元测试
+Every pinned value lives in `src/context_compaction/pins.py`; all dependencies are locked by `uv.lock`.
 
-云主机默认配置：`n2-standard-16`（16 vCPU / 64 GB），Ubuntu 24.04 amd64，500 GB pd-balanced。默认项目由 `CC_PROJECT` 指定，区域 `us-central1-b`，不受 gcloud 全局配置影响；在你自己的账号下运行时，用 `CC_PROJECT` 换成你的项目 ID。可以用 `CC_PROJECT`、`CC_ZONE`、`CC_VM`、`CC_MACHINE`、`CC_DISK_GB` 覆盖。实验结束后执行 `gcloud projects delete <project-id>` 就能清掉所有资源
+| Component | Version | Note |
+| --- | --- | --- |
+| Python | 3.12 | One interpreter, so the lock file has a single resolution |
+| mini-swe-agent | 2.4.0 | The paper only says v2.4; the patch version is our choice |
+| swebench | 5.0.2 | Official evaluation; the paper does not give a version |
+| Dataset | SWE-bench/SWE-bench_Verified @ `78f471bf` | 500 tasks; the parquet sha256 is in pins.py |
+
+We do not use `princeton-nlp/SWE-bench_Verified`: swebench 5.x needs the `image`, `eval_script` and `log_parser` fields, which only the `SWE-bench/` dataset has. The two share all 500 ids, problem statements, patches and base commits; `PASS_TO_PASS` is trimmed for `astropy__astropy-7606` and `django__django-10097`. Agent runs and evaluation read the same local snapshot, `data/SWE-bench_Verified`.
+
+## Sampling
+
+`configs/instances.json` is generated and frozen, seed 20261104.
+
+- Formal set, 100 tasks: stratified by repo with randomized systematic rounding, so every task has inclusion probability 1/5 and the plain mean is an unbiased estimate for all 500. Small repos can get 0 tasks in one draw (Flask and Seaborn here); that is sampling variance, not bias.
+- Smoke set, 20 tasks: drawn from the remaining 400, one per repo first, the rest proportional. Used only for tuning and environment checks, never in estimates.
+- `records_sha256` covers every field of every record, so any change to the data is detected.
+
+## Gold validation
+
+All 120 sampled tasks were run through the official harness with their gold patches on x86: 119 resolve. `psf__requests-1724` (smoke set) failed on all 5 runs because its `PASS_TO_PASS` tests call the live httpbin.org (HTTP 429 and an expired CA bundle). It is frozen in `configs/env_unsolvable.json` and excluded from the primary analysis of every group. All 100 formal tasks resolve. Summaries are in `results/gold/`.
+
+## Code
+
+| Path | Content |
+| --- | --- |
+| `src/context_compaction/event_log.py` | Append-only event log kept outside the container; records which files each action changed |
+| `src/context_compaction/state.py` | State schema and versioned store |
+| `src/context_compaction/patch.py` | Patch validation, invalidation of stale evidence, rebuild after a fallback |
+| `src/context_compaction/compactor.py` | One compaction turn: patch, one shared retry, text fallback, rebuild |
+| `src/context_compaction/pins.py`, `credentials.py`, `tokens.py` | Pinned values, API key loading, token counting |
+| `scripts/` | Sampling, dataset download, environment check, gold evaluation, cloud VM management |
+| `tests/` | Unit tests (`pytest`) |
+
+## Running environment
+
+All Docker work (gold evaluation, smoke and formal runs, official evaluation) runs on an x86 VM on GCP. SWE-bench images are x86_64; on an Apple Silicon Mac they run under emulation, which makes environment failures indistinguishable from model failures. The Mac is only for development and unit tests.
+
+Default VM: `n2-standard-16` (16 vCPU / 64 GB), Ubuntu 24.04 amd64, 500 GB pd-balanced. Set `CC_PROJECT` to your GCP project id; `CC_ZONE`, `CC_VM`, `CC_MACHINE` and `CC_DISK_GB` override the other defaults in `scripts/cloud/gcp.sh`. A dedicated project makes cleanup a single `gcloud projects delete`.
 
 ```bash
 scripts/cloud/gcp.sh create
@@ -43,14 +85,14 @@ scripts/cloud/gcp.sh pull
 scripts/cloud/gcp.sh stop
 ```
 
-- `setup` 会先 `push`：用 rsync 同步代码（含 `.git`，不含 `.venv`、`data`、`results`），把 key 放到云主机的 `~/.config/context-compaction/`（权限 600），然后安装 Docker、uv 和锁定的依赖，跑单测并下载数据快照
-- `run` 在 tmux 里后台执行，断开 SSH 不影响；日志写在云主机的 `logs/<CC_JOB>.log`
-- 改了代码之后先 `push` 再 `run`；结果用 `pull` 拉回本地的 `results/`
-- 不用的时候 `stop`，停机后只收磁盘费；`delete` 会连磁盘一起删掉
-- `gcloud compute config-ssh` 会往 `~/.ssh/config` 写入 `cc-x86.<zone>.<project>` 主机条目
-- Docker 已配置 `mirror.gcr.io` 镜像缓存；如果拉镜像遇到 429 限流，在云主机上执行一次 `docker login`
+- `setup` runs `push` first: it rsyncs the code (with `.git`, without `.venv`, `data`, `results`), copies the API key file (`CC_KEY_FILE`) to the VM with mode 600, then installs Docker, uv and the locked dependencies, runs the tests and downloads the dataset snapshot.
+- `run` starts the job in tmux, so it survives SSH disconnects; the log goes to `logs/<CC_JOB>.log` on the VM.
+- After changing code, `push` before `run`; `pull` brings `results/` back.
+- `stop` when idle: a stopped VM only bills for its disk. `delete` removes the disk too.
+- `gcloud compute config-ssh` adds a `cc-x86.<zone>.<project>` host entry to `~/.ssh/config`.
+- Docker uses the `mirror.gcr.io` pull-through cache; if image pulls hit HTTP 429, run `docker login` once on the VM.
 
-## 在 Mac 上开发
+## Developing on a Mac
 
 ```bash
 uv sync --frozen --extra dev
@@ -59,7 +101,7 @@ pytest
 python scripts/fetch_dataset.py
 ```
 
-- API key：优先读环境变量 `OPENAI_API_KEY`，没有时读 `~/.config/context-compaction/openai.txt`（一行裸 key，目录可用 `CC_CREDENTIALS_DIR` 覆盖）。key 不进仓库
-- `check_env.py`：快速检查，任何一项失败都返回非零，不会打印密钥
-- `gold_eval.py`：用 gold 补丁跑官方评测，列出没有 resolved 的题，有这样的题时返回非零。在云主机上先跑冒烟集，再跑全部 120 题；同一个 `--set` 重跑时会跳过已完成的题，结果写在 `results/gold/`。没通过的题再重跑 2 次，仍不通过就写入 `configs/env_unsolvable.json`，在跑 agent 之前冻结，所有组的主分析统一排除这些题
-- `sample_instances.py`：重新运行时如果结果和已冻结的文件不同，会拒绝覆盖
+- API key: read from `OPENAI_API_KEY` if set, else from `openai.txt` (one bare key) in the directory named by `CC_CREDENTIALS_DIR`. Keep the key outside the repo.
+- `check_env.py`: fast checks; exits non-zero if any check fails and never prints the key.
+- `gold_eval.py`: runs the official harness with gold patches and lists tasks that do not resolve, exiting non-zero if there are any. Run the smoke set first, then all 120; rerunning the same `--set` skips finished tasks, and `--run-id` starts a fresh run. Results go to `results/gold/`. A task that still fails after 2 reruns goes into `configs/env_unsolvable.json`, frozen before any agent run.
+- `sample_instances.py`: refuses to overwrite the frozen file if a rerun gives a different result.

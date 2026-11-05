@@ -14,3 +14,6 @@ logs/
 .DS_Store
 *.egg-info/
 *.pdf
+
+# local notes for Claude, holds machine-specific paths
+CLAUDE.md
