@@ -26,7 +26,7 @@ Same model (GPT 5.6 Sol) and the same list prices ($4 / $0.40 / $20 per million 
 - **It does not make the agent repeat itself.** 0.35% of actions after a compaction repeated earlier work.
 - **16K alone is tight for it.** 8% of tasks overflowed when a rejected patch had no room for its retry; with a 24K fallback none did.
 
-**What this does not show.** The paper's numbers come from all 500 tasks with its own prompts and harness, so this is an outside comparison, not a paired one; with a ±7-point interval, the gap to 48K (88.8%) is not resolved either way, and this project did not run 48K. The 16K/24K row combines runs after the formal 16K result was in. Running the full-history agent, or 48K, on these same 100 tasks would make the comparison paired. Full analysis: [docs/results.md](docs/results.md).
+**What this does not show.** The paper's numbers come from all 500 tasks with its own prompts and harness, so this is an outside comparison, not a paired one; with a ±7-point interval, the gap to 48K (88.8%) is not resolved either way. The 16K/24K row combines runs after the formal 16K result was in. Full analysis: [docs/results.md](docs/results.md).
 
 ## Why
 
